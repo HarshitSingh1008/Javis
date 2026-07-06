@@ -739,6 +739,62 @@ class CapabilitySynthesizer:
         except Exception as e:
             logger.debug("Tool search failed: %s", e)
             return None
+    
+    async def build_prompt(self, state: Dict[str, Any], tool_descriptions: str) -> str:
+        """
+        Build a system prompt for the LLM based on state and available tools.
+        
+        Args:
+            state: Current agent state (dict).
+            tool_descriptions: Available tools description.
+        
+        Returns:
+            System prompt string for the LLM.
+        """
+        user_query = state.get("user_query", "Process the user request.")
+        conversation_summary = state.get("conversation_summary", "")
+        
+        summary_section = ""
+        if conversation_summary:
+            summary_section = f"\n\nPrior conversation context:\n{conversation_summary}"
+        
+        prompt = f"""You are NEXUS AI, an autonomous desktop agent.
+
+User Query: {user_query}{summary_section}
+
+Available Tools:
+{tool_descriptions}
+
+Instructions:
+1. Understand the user's intent
+2. Plan the steps needed
+3. Execute tools in the correct order
+4. Return clear results
+
+Respond with structured reasoning and tool calls."""
+        
+        return prompt
+    
+    def build_conversation_context(
+        self, 
+        history: List[Dict[str, str]], 
+        max_messages: int = 20
+    ) -> List[Dict[str, str]]:
+        """
+        Build a trimmed conversation context from history.
+        
+        Args:
+            history: Full conversation history.
+            max_messages: Maximum messages to keep.
+        
+        Returns:
+            Trimmed conversation history.
+        """
+        if not history:
+            return []
+        
+        # Keep only the last max_messages
+        return history[-max_messages:] if len(history) > max_messages else history
 
 
 @lru_cache(maxsize=1)
@@ -750,3 +806,14 @@ def get_capability_synthesizer() -> CapabilitySynthesizer:
         CapabilitySynthesizer: The singleton synthesizer instance.
     """
     return CapabilitySynthesizer()
+
+
+@lru_cache(maxsize=1)
+def get_context_builder() -> CapabilitySynthesizer:
+    """
+    Return the singleton context builder instance (CapabilitySynthesizer).
+    
+    Returns:
+        CapabilitySynthesizer: The singleton synthesizer instance.
+    """
+    return get_capability_synthesizer()

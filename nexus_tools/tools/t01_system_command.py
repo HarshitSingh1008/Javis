@@ -17,6 +17,7 @@ import shlex
 import time
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+from langchain_core.tools import tool
 
 logger = logging.getLogger("nexus.tool.system_command")
 
@@ -45,6 +46,7 @@ ALLOWED_COMMANDS: Dict[str, Dict[str, Any]] = {
 }
 
 
+@tool
 def run_system_command(
     command: str,
     args: Optional[List[str]] = None,

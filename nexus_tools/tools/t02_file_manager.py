@@ -14,6 +14,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Union
+from langchain_core.tools import tool
 
 logger = logging.getLogger("nexus.tool.file_manager")
 
@@ -55,6 +56,7 @@ def _validate_path(path: str, must_exist: bool = False) -> Optional[str]:
         return f"Invalid path: {e}"
 
 
+@tool
 def file_manager(
     operation: str,
     path: str,

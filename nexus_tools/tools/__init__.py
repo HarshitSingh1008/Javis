@@ -56,4 +56,9 @@ ALL_TOOLS = [
     git_operations,
 ]
 
-__all__ = ["ALL_TOOLS"] + [t.__name__ for t in ALL_TOOLS]
+__all__ = ["ALL_TOOLS"]
+# Add tool names (handle both regular functions and StructuredTool objects)
+for tool in ALL_TOOLS:
+    name = getattr(tool, "__name__", None) or getattr(tool, "name", None)
+    if name:
+        __all__.append(name)

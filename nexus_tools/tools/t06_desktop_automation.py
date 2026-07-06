@@ -10,6 +10,7 @@ import json
 import logging
 import time
 from typing import Optional, List, Dict, Any, Tuple
+from langchain_core.tools import tool
 
 logger = logging.getLogger("nexus.tool.desktop_automation")
 
@@ -17,6 +18,7 @@ logger = logging.getLogger("nexus.tool.desktop_automation")
 UI_AUTOMATION_LOCK: Any = None  # Will be set to asyncio.Lock() at runtime
 
 
+@tool
 def desktop_automation(
     action: str,
     x: Optional[int] = None,

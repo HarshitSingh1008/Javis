@@ -18,11 +18,17 @@ Hardened boot sequence:
 """
 
 import sys
+import io
 import os
 import logging
 import signal
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
+
+# Fix Unicode encoding for Windows console
+if sys.platform.startswith("win"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
 # ─── Boot Constants ──────────────────────────────────────────────────────────
 
@@ -129,7 +135,8 @@ def main():
     try:
         from nexus_tools.registry import get_tool_registry
         registry = get_tool_registry()
-        logger.info("Tool registry initialized with %d tools", len(registry._tools))
+        count = registry.load_builtin_tools()
+        logger.info("Tool registry initialized with %d tools", count)
     except Exception as e:
         logger.warning("Tool registry initialization failed: %s", e)
     
@@ -155,6 +162,21 @@ def main():
     try:
         from nexus_brain.orchestrator import get_orchestrator
         orchestrator = get_orchestrator()
+        
+        # Set up tool executor
+        async def tool_executor(tool_name: str, tool_input: Dict[str, Any], is_ui: bool) -> str:
+            """Execute a tool from the registry."""
+            try:
+                if tool_name == "__list_tools__":
+                    return registry.format_for_prompt()
+                
+                result = await registry.execute(tool_name, tool_input)
+                return result
+            except Exception as e:
+                logger.error("Tool execution failed for '%s': %s", tool_name, e)
+                return f"Error executing {tool_name}: {str(e)}"
+        
+        orchestrator.set_tool_executor(tool_executor)
         logger.info("Agent orchestrator ready")
     except Exception as e:
         logger.error("Agent orchestrator initialization failed: %s", e)

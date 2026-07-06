@@ -541,44 +541,45 @@ class LLMRouter:
         max_tokens: int,
         response_format: Optional[Dict[str, str]] = None,
     ) -> LLMResponse:
-        """Call Ollama's /api/chat endpoint."""
-        import httpx
-        
-        payload: Dict[str, Any] = {
-            "model": self._settings.OLLAMA_MODEL,
-            "messages": messages,
-            "temperature": temperature,
-            "num_predict": max_tokens,
-            "stream": False,
-        }
-        
-        async with httpx.AsyncClient(timeout=self._settings.LLM_REQUEST_TIMEOUT) as client:
-            response = await client.post(
-                f"{self._ollama_url}/api/chat",
-                json=payload,
+        """Call Ollama using the Python client for better compatibility."""
+        try:
+            from ollama import Client, ResponseError
+            
+            client = Client(host=self._ollama_url)
+            
+            # Convert messages to prompt format for compatibility
+            prompt = ""
+            for msg in messages:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                prompt += f"{role}: {content}\n"
+            
+            # Use the generate endpoint which is more stable
+            response = client.generate(
+                model=self._settings.OLLAMA_MODEL,
+                prompt=prompt,
+                temperature=temperature,
+                num_predict=max_tokens,
+                stream=False,
             )
-            response.raise_for_status()
-            data = response.json()
+            
+            content = response.get("response", "")
+            
+            # Extract token counts
+            input_tokens = response.get("prompt_eval_count", 0)
+            output_tokens = response.get("eval_count", 0)
+            
+            return LLMResponse(
+                content=content or "",
+                provider="ollama",
+                model=self._settings.OLLAMA_MODEL,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
         
-        content = data.get("message", {}).get("content", "")
-        
-        # Ollama may not report token usage — parse what we can
-        input_tokens = 0
-        output_tokens = 0
-        eval_count = data.get("eval_count")
-        prompt_eval_count = data.get("prompt_eval_count")
-        if eval_count is not None:
-            output_tokens = eval_count
-        if prompt_eval_count is not None:
-            input_tokens = prompt_eval_count
-        
-        return LLMResponse(
-            content=content or "",
-            provider="ollama",
-            model=self._settings.OLLAMA_MODEL,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-        )
+        except Exception as e:
+            logger.error("Ollama call failed: %s", e)
+            raise RuntimeError(f"Ollama unavailable: {str(e)}")
     
     async def _stream_ollama(
         self,
@@ -586,32 +587,38 @@ class LLMRouter:
         temperature: float,
         max_tokens: int,
     ) -> AsyncIterator[str]:
-        import httpx
+        """Stream responses from Ollama."""
+        try:
+            from ollama import Client
+            
+            client = Client(host=self._ollama_url)
+            
+            # Convert messages to prompt format
+            prompt = ""
+            for msg in messages:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                prompt += f"{role}: {content}\n"
+            
+            # Stream from Ollama
+            response = client.generate(
+                model=self._settings.OLLAMA_MODEL,
+                prompt=prompt,
+                temperature=temperature,
+                num_predict=max_tokens,
+                stream=True,
+            )
+            
+            for chunk in response:
+                token = chunk.get("response", "")
+                if token:
+                    yield token
+                if chunk.get("done"):
+                    break
         
-        payload: Dict[str, Any] = {
-            "model": self._settings.OLLAMA_MODEL,
-            "messages": messages,
-            "temperature": temperature,
-            "num_predict": max_tokens,
-            "stream": True,
-        }
-        
-        async with httpx.AsyncClient(timeout=self._settings.LLM_REQUEST_TIMEOUT) as client:
-            async with client.stream("POST", f"{self._ollama_url}/api/chat", json=payload) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line:
-                        continue
-                    import json
-                    try:
-                        data = json.loads(line)
-                        token = data.get("message", {}).get("content", "")
-                        if token:
-                            yield token
-                        if data.get("done"):
-                            break
-                    except json.JSONDecodeError:
-                        continue
+        except Exception as e:
+            logger.error("Ollama streaming failed: %s", e)
+            yield f"[Ollama streaming error: {str(e)}]"
 
 
 @lru_cache(maxsize=1)
@@ -626,38 +633,6 @@ def get_llm_router() -> LLMRouter:
         LLMRouter: The singleton router instance.
     """
     return LLMRouter()
-</content>
-</write_tool_result>
-
-<write_to_file>
-<path>nexus_brain/llm_router.py</path>
-<content>"""
-NEXUS AI v4.0 — Triple LLM fallback with circuit breaker.
-Hardware: Intel i3 7th Gen · 12GB RAM · Ollama + Groq API
-
-Routing hierarchy:
-  1. Groq (primary) — llama-3.3-70b-versatile, 800+ tok/sec via LPU
-  2. OpenAI (fallback) — gpt-4o-mini, cheap and capable
-  3. Ollama (tertiary, offline) — llama3.2:3b-instruct-q4_K_M, ~18 tok/sec
-
-The circuit breaker prevents repeatedly hammering a failing provider.
-After CIRCUIT_BREAKER_FAILURES consecutive failures, the provider is
-skipped for CIRCUIT_BREAKER_RESET_SECONDS seconds.
-"""
-
-import asyncio
-import logging
-import time
-from dataclasses import dataclass
-from enum import Enum
-from typing import Optional, AsyncIterator, List, Dict, Any
-from functools import lru_cache
-
-from nexus_config.settings import get_settings
-from nexus_config.audit_logger import get_audit_logger
-
-
-logger = logging.getLogger("nexus.llm_router")
 
 
 # ─── Circuit Breaker States ───────────────────────────────────────────────────

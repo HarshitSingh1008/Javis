@@ -136,9 +136,15 @@ class ToolRegistry:
         """
         import datetime
         
-        name = getattr(tool_func, "__name__", None) or getattr(tool_func, "name", None)
+        # If metadata is provided with a name, use that (most authoritative)
+        if metadata and metadata.name:
+            name = metadata.name
+        else:
+            # For LangChain @tool decorated functions (StructuredTool), check name first
+            name = getattr(tool_func, "name", None) or getattr(tool_func, "__name__", None)
+        
         if not name:
-            raise ValueError("Tool function must have a __name__ attribute.")
+            raise ValueError("Tool function must have a __name__ attribute or metadata with a name.")
         
         doc = (tool_func.__doc__ or "No description available.").strip()
         # Take first line/sentence of docstring
@@ -640,7 +646,12 @@ class ToolRegistry:
                     if hasattr(attr, "__name__") and callable(attr) and not attr_name.startswith("_"):
                         # Check if it's a regular function (not a class)
                         if inspect.isfunction(attr) or hasattr(attr, "invoke"):
-                            self.register(attr, source="builtin")
+                            # Use attr_name as the canonical tool name (most reliable)
+                            self.register(attr, source="builtin", metadata=PluginMetadata(
+                                name=attr_name,  # Force use of module-level variable name
+                                description=getattr(attr, "__doc__", "").split("\n")[0][:200] if getattr(attr, "__doc__") else "No description",
+                                source="builtin"
+                            ))
                             tools_found += 1
                 
                 if tools_found == 0:

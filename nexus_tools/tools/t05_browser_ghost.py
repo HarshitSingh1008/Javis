@@ -10,6 +10,7 @@ import json
 import logging
 import time
 from typing import Optional, List, Dict, Any
+from langchain_core.tools import tool
 
 logger = logging.getLogger("nexus.tool.browser_ghost")
 
@@ -17,6 +18,7 @@ logger = logging.getLogger("nexus.tool.browser_ghost")
 BROWSER_TIMEOUT: int = 30000  # milliseconds
 
 
+@tool
 def browser_ghost(
     action: str,
     url: Optional[str] = None,

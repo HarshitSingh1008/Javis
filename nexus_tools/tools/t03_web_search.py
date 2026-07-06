@@ -10,6 +10,7 @@ import json
 import logging
 import time
 from typing import Optional, List, Dict, Any
+from langchain_core.tools import tool
 
 logger = logging.getLogger("nexus.tool.web_search")
 
@@ -18,6 +19,7 @@ MAX_RESULTS: int = 10
 SEARCH_TIMEOUT: int = 15
 
 
+@tool
 def web_search(
     query: str,
     max_results: int = 5,
