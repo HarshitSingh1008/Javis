@@ -173,12 +173,11 @@ def _cmd_config(args: list, headless: bool = False) -> None:
         print("NEXUS AI Configuration:")
         print(f"  Version: {settings.app_version}")
         print(f"  Platform: {settings.platform_name}")
-        print(f"  Tier: {settings.TIER}")
-        print(f"  Primary Model: {settings.PRIMARY_MODEL}")
-        print(f"  Ollama Model: {settings.OLLAMA_MODEL}")
+        print(f"  Ollama URL: {settings.OLLAMA_BASE_URL}")
+        print(f"  Primary Model: {settings.OLLAMA_MODEL}")
+        print(f"  Intent Model: {settings.OLLAMA_INTENT_MODEL}")
         print(f"  Theme: {settings.UI_THEME}")
-        print(f"  Groq API Key: {'***set***' if settings.GROQ_API_KEY else 'not set'}")
-        print(f"  OpenAI API Key: {'***set***' if settings.OPENAI_API_KEY else 'not set'}")
+        print(f"  Groq Fallback: {'***set***' if settings.GROQ_API_KEY else 'not set (local only)'}")
     else:
         print("Usage: nexus config [show]")
 

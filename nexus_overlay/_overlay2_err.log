@@ -1,0 +1,15 @@
+E:\Jarvis 2.0\venv\venv\Lib\site-packages\pygame\pkgdata.py:25: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import resource_stream, resource_exists
+Traceback (most recent call last):
+  File "E:\Jarvis 2.0\venv\main.py", line 357, in <module>
+    main()
+  File "E:\Jarvis 2.0\venv\main.py", line 247, in main
+    _run_overlay_ui(orchestrator, overlay_integration)
+  File "E:\Jarvis 2.0\venv\main.py", line 271, in _run_overlay_ui
+    logger.info("Overlay process started (PID: %d)", overlay_proc.pid)
+    ^^^^^^
+NameError: name 'logger' is not defined
+<frozen runpy>:128: RuntimeWarning: 'nexus_overlay.overlay_process' found in sys.modules after import of package 'nexus_overlay', but prior to execution of 'nexus_overlay.overlay_process'; this may result in unpredictable behaviour
+22:09:22 | nexus.overlay.config           | INFO     | Loaded overlay config from C:\Users\lenovo\.nexus_ai\overlay_config.json
+22:09:22 | nexus.overlay.process          | INFO     | Starting overlay window at (100, 100)
+22:14:35 | nexus.overlay.process          | INFO     | Overlay window closed

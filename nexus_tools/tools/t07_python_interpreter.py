@@ -76,6 +76,8 @@ def _execute_locally(code: str, timeout: int) -> str:
     import traceback
     from contextlib import redirect_stdout, redirect_stderr
     
+    start = time.perf_counter()
+    
     # Restricted builtins for safety
     safe_builtins = {
         'abs', 'all', 'any', 'ascii', 'bin', 'bool', 'bytearray', 'bytes',
@@ -141,10 +143,12 @@ def _execute_locally(code: str, timeout: int) -> str:
 
 def _execute_in_sandbox(code: str, timeout: int) -> str:
     """Execute Python code in a sandboxed subprocess."""
-    from nexus_tools.secure_sandbox import execute_in_sandbox
+    from nexus_tools.secure_sandbox import sandbox_execute
     
     import tempfile
     import os
+    
+    start = time.perf_counter()
     
     # Write code to a temp file for sandbox execution
     with tempfile.NamedTemporaryFile(
@@ -154,11 +158,7 @@ def _execute_in_sandbox(code: str, timeout: int) -> str:
         temp_path = f.name
     
     try:
-        result = execute_in_sandbox(
-            code=code,
-            timeout=timeout,
-            use_docker=False,
-        )
+        result = sandbox_execute(code_str=code, timeout=timeout)
         
         duration_ms = (time.perf_counter() - start) * 1000
         

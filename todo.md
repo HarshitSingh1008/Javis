@@ -1,4 +1,32 @@
-# ╔════════════════════════════════════════════════════════════════════╗
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  NEXUS AI v4.0 — RING OVERLAY SUBSYSTEM — STATUS                 ║
+# ║  Hardware: Intel i3 7th Gen · 12GB RAM · Ollama + Groq API        ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+
+## ✅ Completed
+- [x] `nexus_overlay/config.py` — centralized OverlayConfig (colors, ring/bar/particle params, WS settings, state debounce)
+- [x] `nexus_overlay/websocket_server.py` — OverlayWebSocketServer (dedicated-thread asyncio WS, thread-safe enqueue, 30fps audio rate-limit, state debounce, re-push on reconnect)
+- [x] `nexus_overlay/audio_tap.py` — AudioTapManager (numpy rfft FFT on rolling buffers, mic+TTS taps, change-detection send)
+- [x] `nexus_overlay/core_integration.py` — OverlayIntegration (orchestrator+ wake_word+ TTS wiring, lazy mic tap, state machine)
+- [x] `nexus_overlay/overlay_process.py` — pywebview entry point (frameless, transparent, always-on-top, corner-positioned, position-persisted)
+- [x] `nexus_overlay/assets/overlay.html` — pure canvas ring per reference impl (concentric rings, radial bars driven by real bins, particle bursts, idle breathe, radar sweep, error jitter)
+- [x] `main.py` — `_shutdown`, wake-word start, overlay subprocess lifecycle
+- [x] `requirements.txt` — pywebview >=6.0, websockets >=16.0; added screeninfo fallback (ctypes) in overlay_process
+- [x] README — overlay standalone testing section
+
+## 🐛 Bugs found & fixed
+1. websocket_server: `asyncio.Queue` created in `__init__` (wrong thread/loop) → moved into `_run_server` (server loop). `put_nowait` from ReAct thread → `call_soon_threadsafe`. Legacy `WebSocketServerProtocol` import → modern `websockets.asyncio.server.serve`.
+2. websocket_server: `send_response`, `send_error`, `set_text_input_callback`, `set_voice_input_callback`, `OVERLAY_STATES` referenced by core_integration but did not exist → removed (schema is state+audio only).
+3. audio_tap: `push_mic_frame`/`push_tts_data` gated on `self._running` → frames buffered before thread starts.
+4. core_integration: `TRANSCRIBING` state sent to overlay (not in schema) → removed; now maps WAKE_DETECTED→listening, TRANSCRIBING→thinking.
+5. core_integration: mic tap hook in `initialize()` tried to read `_recorder` before Porcupine init → moved to lazy hook in `start()`.
+6. core_integration: TTS `say()` never called → wired `final_response` → TTS in flow.
+7. core_integration: monitor loop used `send_response`/`send_error` (undefined) → fixed to `send_state` + `ws_server.send_state('error')`.
+8. overlay_process: `screeninfo` not installed → added ctypes `GetSystemMetrics` fallback.
+9. overlay_process: `_on_moved` persisted position to config → persists via `config.save()`.
+10. main.py: `_shutdown()` undefined but called → added; wake word daemon never started → started; overlay subprocess not terminated → tracked + killed.
+
+## 🔄 In Progress / Remaining═══════════════════════════════════════════════════════════════════╗
 # ║  NEXUS AI — BILLING INFRASTRUCTURE — IMPLEMENTATION STATUS         ║
 # ║  Based on: "next step.txt" — Monetization & Licensing Spec v1.0    ║
 # ╚════════════════════════════════════════════════════════════════════╝
@@ -66,10 +94,3 @@
 
 ## 📋 Remaining (Lower Priority / Production Readiness)
 - [ ] Create `tests/test_stripe_webhooks.py` — Integration tests for webhook handlers
-- [ ] Create `tests/test_license_issuer.py` — Tests for license issuance + refresh
-- [ ] Create `tests/test_customer_portal.py` — Tests for portal endpoints
-- [ ] Create Alembic migrations directory + initial migration
-- [ ] Create `Dockerfile` for cloud backend
-- [ ] Create `docker-compose.yml` for backend + postgres + redis
-- [ ] Add pre-commit hook for THIRD_PARTY_NOTICES regeneration (Section 1.3, LAW L1)
-- [ ] Wire usage_metering into orchestrator's final graph node

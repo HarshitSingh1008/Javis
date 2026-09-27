@@ -25,10 +25,10 @@ class TestSettingsDefaults:
 
     def test_default_settings_loaded(self, mock_settings):
         """Test that settings are loaded with expected defaults."""
-        assert mock_settings.PRIMARY_MODEL == "llama-3.3-70b-versatile"
-        assert mock_settings.FALLBACK_MODEL == "gpt-4o-mini"
+        assert mock_settings.PRIMARY_MODEL == "llama3.2:3b-instruct-q4_K_M"
+        assert mock_settings.FALLBACK_MODEL == "llama3.2:3b-instruct-q4_K_M"
         assert mock_settings.OLLAMA_BASE_URL == "http://localhost:11434"
-        assert mock_settings.TIER == "free"
+        assert mock_settings.OLLAMA_MODEL == "llama3.2:3b-instruct-q4_K_M"
         assert mock_settings.UI_THEME in ("dark_platinum", "midnight_blue", "void_black")
 
     def test_agent_defaults(self, mock_settings):
@@ -49,11 +49,6 @@ class TestSettingsDefaults:
         assert mock_settings.AUDIO_BUFFER_SIZE == 512
         assert mock_settings.WHISPER_MODEL_SIZE == "base"
 
-    def test_tier_default(self, mock_settings):
-        """Test that default tier is 'free'."""
-        assert mock_settings.TIER == "free"
-        assert mock_settings.FREE_TIER_MONTHLY_TASKS == 100
-
     def test_app_version(self, mock_settings):
         """Test app version is set."""
         assert mock_settings.app_version == "4.0.0"
@@ -71,15 +66,15 @@ class TestSettingsEnvOverrides:
         """Test that Ollama model is set from env."""
         assert "3b" in mock_settings.OLLAMA_MODEL
 
-    def test_env_tier(self, monkeypatch):
-        """Test that TIER can be overridden via env."""
+    def test_env_ollama_model(self, monkeypatch):
+        """Test that OLLAMA_MODEL can be overridden via env."""
         from nexus_config.settings import get_settings
         get_settings.cache_clear()
-        monkeypatch.setenv("TIER", "personal_pro")
+        monkeypatch.setenv("OLLAMA_MODEL", "phi3:mini-128k-instruct-q4_K_M")
         monkeypatch.setenv("GROQ_API_KEY", "test_key_override")
         monkeypatch.setenv("OPENAI_API_KEY", "test_openai_override")
         s = get_settings()
-        assert s.TIER == "personal_pro"
+        assert s.OLLAMA_MODEL == "phi3:mini-128k-instruct-q4_K_M"
         get_settings.cache_clear()
 
     def test_env_ui_theme(self, monkeypatch):
@@ -113,8 +108,8 @@ class TestBootValidation:
         from nexus_config.settings import validate_on_boot
         with patch("nexus_config.settings.get_settings", return_value=mock_settings):
             status = validate_on_boot()
-        if not mock_settings.GROQ_API_KEY:
-            assert "GROQ_API_KEY" in status.missing_keys
+        # Groq is now optional - only Ollama is required
+        assert "GROQ_API_KEY" not in status.missing_keys
 
     def test_validate_on_boot_platform_notes(self, mock_settings):
         """Test that platform-specific notes are generated."""

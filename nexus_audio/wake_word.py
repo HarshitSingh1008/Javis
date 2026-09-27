@@ -27,6 +27,7 @@ from typing import Optional, Callable, Dict, Any, List
 from functools import lru_cache
 
 from nexus_config.settings import get_settings, APP_ROOT
+from nexus_brain.service_lifecycle import ServiceBase
 
 logger = logging.getLogger("nexus.wake_word")
 
@@ -64,9 +65,9 @@ class WakeWordEvent:
 
 # ─── Wake Word Daemon ───────────────────────────────────────────────────────
 
-class WakeWordDaemon:
+class WakeWordDaemon(ServiceBase):
     """
-    Background daemon for wake-word-triggered voice input.
+    Background daemon for wake-word-triggered voice input with lifecycle management.
     
     Architecture:
       - Thread 1 (this class): Audio capture + Porcupine detection loop
@@ -74,13 +75,13 @@ class WakeWordDaemon:
     
     Usage:
         daemon = get_wake_word_daemon()
-        daemon.set_callback(lambda event: print(event.text))
-        daemon.start()
-        # ...
-        daemon.stop()
+        async with daemon.lifespan():
+            daemon.set_callback(lambda event: print(event.text))
+            # daemon runs in background
     """
     
     def __init__(self):
+        super().__init__("wake_word")
         self._settings = get_settings()
         
         # Callback for transcription results
@@ -128,20 +129,15 @@ class WakeWordDaemon:
         """
         self._callback = callback
     
-    def start(self) -> bool:
-        """
-        Start the wake word detection daemon.
-        
-        Initializes Porcupine and starts the background listening thread.
-        
-        Returns:
-            True if started successfully, False if wake word is disabled.
-        """
+    # ── Service Lifecycle ───────────────────────────────────────────────────
+    
+    async def _start(self) -> None:
+        """Start wake word daemon."""
         if self._state == WakeWordState.DISABLED:
-            return False
+            return
         
         if self._running:
-            return True
+            return
         
         try:
             self._init_porcupine()
@@ -153,7 +149,7 @@ class WakeWordDaemon:
                 error=f"Porcupine init failed: {e}",
                 state=WakeWordState.ERROR,
             ))
-            return False
+            return
         
         self._running = True
         self._thread = threading.Thread(
@@ -171,10 +167,9 @@ class WakeWordDaemon:
         ).start()
         
         logger.info("Wake word daemon started (words: %s)", self._settings.WAKE_WORDS)
-        return True
     
-    def stop(self) -> None:
-        """Stop the wake word daemon and clean up resources."""
+    async def _stop(self) -> None:
+        """Stop wake word daemon."""
         self._running = False
         self._wake_detected_event.set()  # Unblock any waiting
         
@@ -194,6 +189,58 @@ class WakeWordDaemon:
         
         self._set_state(WakeWordState.DISABLED)
         logger.info("Wake word daemon stopped.")
+    
+    async def _health_check(self) -> tuple[bool, str, Dict[str, Any]]:
+        """Check wake word health."""
+        if self._state == WakeWordState.DISABLED:
+            return False, "Wake word disabled", {"enabled": False, "porcupine_key": False}
+        
+        if not self._settings.PORCUPINE_ACCESS_KEY:
+            return False, "No Porcupine access key", {"porcupine_key": False}
+        
+        if not self._running:
+            return False, "Daemon not running", {"running": False}
+        
+        # Check Porcupine import
+        try:
+            import pvporcupine
+            return True, "Wake word healthy", {
+                "running": True,
+                "porcupine_key": True,
+                "state": self._state.value,
+            }
+        except ImportError:
+            return False, "pvporcupine not installed", {"pvporcupine": False}
+        except Exception as e:
+            return False, f"Health check error: {e}", {"running": self._running}
+    
+    # ── Public API (legacy sync methods for compatibility) ──────────────────
+    
+    def start(self) -> bool:
+        """Start the wake word detection daemon (sync wrapper)."""
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Can't await in running loop, start in background
+                asyncio.create_task(self._start())
+                return True
+            else:
+                return loop.run_until_complete(self._start()) is not False
+        except Exception:
+            return False
+    
+    def stop(self) -> None:
+        """Stop the wake word daemon (sync wrapper)."""
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(self._stop())
+            else:
+                loop.run_until_complete(self._stop())
+        except Exception:
+            pass
     
     def trigger_manual(self) -> None:
         """

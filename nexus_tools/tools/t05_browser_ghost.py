@@ -1,13 +1,15 @@
 """
-NEXUS AI v4.0 — Tool 05: Playwright browser automation.
+NEXUS AI v4.0 — Tool 05: Playwright browser automation with Opera GX support.
 Hardware: Intel i3 7th Gen · 12GB RAM · Ollama + Groq API
 
 Provides headless and headed browser automation via Playwright:
 navigate, click, type, extract, screenshot, and execute JavaScript.
+Supports Opera GX for user-visible automation.
 """
 
 import json
 import logging
+import os
 import time
 from typing import Optional, List, Dict, Any
 from langchain_core.tools import tool
@@ -16,6 +18,9 @@ logger = logging.getLogger("nexus.tool.browser_ghost")
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 BROWSER_TIMEOUT: int = 30000  # milliseconds
+
+# Opera GX path (Windows)
+OPERA_GX_PATH = os.path.expanduser(r"~\AppData\Local\Programs\Opera GX\opera.exe")
 
 
 @tool
@@ -27,12 +32,14 @@ def browser_ghost(
     javascript: Optional[str] = None,
     headless: bool = True,
     wait_seconds: float = 1.0,
+    use_opera_gx: bool = False,
 ) -> str:
     """
     Control a browser to navigate, interact, and extract web content.
     
     Use this tool when: The user needs to interact with a web page that requires
     JavaScript execution, log in to a website, fill forms, or take screenshots.
+    Set use_opera_gx=True to use Opera GX browser (headed mode only).
     
     Args:
         action: One of: "navigate", "click", "type", "extract", "screenshot",
@@ -43,6 +50,7 @@ def browser_ghost(
         javascript: JavaScript code to execute (for "execute_js" action).
         headless: Run browser in headless mode (no visible window).
         wait_seconds: Seconds to wait after action before returning.
+        use_opera_gx: If True, launches Opera GX browser (requires headed mode).
     
     Returns:
         JSON string with keys:
@@ -62,8 +70,19 @@ def browser_ghost(
         
         with sync_playwright() as p:
             browser_type = p.chromium
+            
+            # Determine browser executable
+            executable_path = None
+            if use_opera_gx and not headless:
+                if os.path.exists(OPERA_GX_PATH):
+                    executable_path = OPERA_GX_PATH
+                    logger.info(f"Using Opera GX at {OPERA_GX_PATH}")
+                else:
+                    logger.warning(f"Opera GX not found at {OPERA_GX_PATH}, falling back to Chromium")
+            
             browser = browser_type.launch(
                 headless=headless,
+                executable_path=executable_path,
                 args=[
                     "--disable-blink-features=AutomationControlled",
                     "--no-sandbox",

@@ -43,6 +43,15 @@ ALLOWED_COMMANDS: Dict[str, Dict[str, Any]] = {
     "grep":   {"flags": ["-r", "-i", "-n", "-l", "-c", "-v"], "desc": "Search text"},
     "which":  {"flags": [], "desc": "Locate a command"},
     "uptime": {"flags": [], "desc": "System uptime"},
+    # Windows app launchers
+    "notepad": {"flags": [], "desc": "Open Notepad"},
+    "calc":   {"flags": [], "desc": "Open Calculator"},
+    "mspaint": {"flags": [], "desc": "Open Paint"},
+    "explorer": {"flags": [], "desc": "Open File Explorer"},
+    "cmd":    {"flags": ["/c"], "desc": "Command prompt"},
+    "powershell": {"flags": ["-Command", "-c"], "desc": "PowerShell"},
+    "start":  {"flags": [], "desc": "Start application (Windows)"},
+    "open":   {"flags": [], "desc": "Open file/app (macOS)"},
 }
 
 

@@ -8,6 +8,9 @@ profiles for different interaction modes.
 
 Memory-optimized: Temp MP3 files are cleaned within 30 seconds of
 playback. pygame mixer runs on a dedicated audio sub-system.
+
+Audio tap integration: Decodes MP3 to PCM for real-time FFT analysis
+by the ring overlay.
 """
 
 import asyncio
@@ -22,6 +25,7 @@ from typing import Optional, Dict, Any, List
 from functools import lru_cache
 
 from nexus_config.settings import get_settings, APP_ROOT
+from nexus_brain.service_lifecycle import ServiceBase
 
 logger = logging.getLogger("nexus.tts")
 
@@ -43,6 +47,14 @@ class VoiceProfile(str, Enum):
     NEXUS_CASUAL = "en-US-JennyNeural"
     NEXUS_TECHNICAL = "en-US-EricNeural"
     NEXUS_FEMALE = "en-GB-SoniaNeural"
+    
+    @classmethod
+    def from_name(cls, name: str) -> "VoiceProfile":
+        """Get VoiceProfile from profile name (e.g., 'NEXUS_PRIME')."""
+        try:
+            return cls[name]
+        except KeyError:
+            return cls.NEXUS_PRIME
 
 
 # Profile → style override map
@@ -60,22 +72,56 @@ VOICE_STYLES: Dict[VoiceProfile, Dict[str, str]] = {
 MAX_TTS_TEXT_LENGTH = 1000  # Characters — longer text is truncated with warning
 MAX_TEMP_AGE = 30  # Seconds — temp files cleaned after this time
 
+# Audio tap callback (set by overlay integration)
+_tts_audio_tap_callback: Optional[callable] = None
 
-class TTSEngine:
+
+def set_tts_audio_tap_callback(callback: callable) -> None:
+    """Set the callback for TTS audio data (called with PCM bytes)."""
+    global _tts_audio_tap_callback
+    _tts_audio_tap_callback = callback
+
+
+def _decode_mp3_to_pcm(mp3_path: str) -> Optional[bytes]:
     """
-    Non-blocking text-to-speech engine.
+    Decode MP3 file to raw PCM bytes (16-bit, mono, 16kHz).
+    
+    Uses pydub with ffmpeg if available, falls back to None.
+    """
+    try:
+        from pydub import AudioSegment
+        
+        # Load MP3
+        audio = AudioSegment.from_mp3(mp3_path)
+        
+        # Convert to 16kHz mono 16-bit PCM
+        audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
+        
+        # Return raw bytes
+        return audio.raw_data
+        
+    except Exception as e:
+        logger.debug("MP3 decode failed (ffmpeg may not be available): %s", e)
+        return None
+
+
+class TTSEngine(ServiceBase):
+    """
+    Non-blocking text-to-speech engine with lifecycle management.
     
     Uses edge-tts for online synthesis and pygame.mixer for playback.
     Both operations are async-compatible via thread pool execution.
     
     Usage:
         tts = get_tts_engine()
-        await tts.say("Hello, I am NEXUS AI")
-        await tts.say("Warning!", profile=VoiceProfile.NEXUS_ALERT)
-        await tts.stop()
+        async with tts.lifespan():
+            await tts.say("Hello, I am NEXUS AI")
+            await tts.say("Warning!", profile=VoiceProfile.NEXUS_ALERT)
+            await tts.stop()
     """
     
     def __init__(self):
+        super().__init__("tts")
         self._settings = get_settings()
         self._current_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -84,17 +130,7 @@ class TTSEngine:
         
         # Track temp files for cleanup
         self._temp_files: List[str] = []
-        self._cleanup_thread = threading.Thread(
-            target=self._cleanup_loop,
-            daemon=True,
-            name="nexus-tts-cleanup",
-        )
-        self._cleanup_thread.start()
-        
-        # Initialize pygame mixer
-        self._init_pygame()
-        
-        logger.info("TTSEngine initialized (profile: %s)", self._settings.DEFAULT_TTS_VOICE)
+        self._cleanup_thread: Optional[threading.Thread] = None
     
     def _init_pygame(self) -> None:
         """Initialize pygame mixer for audio playback."""
@@ -113,6 +149,70 @@ class TTSEngine:
         except Exception as e:
             self._pygame_initialized = False
             logger.warning("pygame mixer init failed: %s. TTS disabled.", e)
+    
+    # ── Service Lifecycle ───────────────────────────────────────────────────
+    
+    async def _start(self) -> None:
+        """Start TTS engine."""
+        self._init_pygame()
+        
+        # Start cleanup thread
+        self._cleanup_thread = threading.Thread(
+            target=self._cleanup_loop,
+            daemon=True,
+            name="nexus-tts-cleanup",
+        )
+        self._cleanup_thread.start()
+        
+        logger.info("TTSEngine started (profile: %s)", self._settings.DEFAULT_TTS_VOICE)
+    
+    async def _stop(self) -> None:
+        """Stop TTS engine."""
+        self._stop_current()
+        
+        # Stop cleanup thread
+        if self._cleanup_thread:
+            # The thread is daemon, so it will exit when main thread exits
+            pass
+        
+        # Clean up temp files
+        for temp_path in self._temp_files:
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
+        self._temp_files.clear()
+        
+        # Quit pygame
+        try:
+            import pygame
+            pygame.mixer.quit()
+        except Exception:
+            pass
+        
+        logger.info("TTSEngine stopped")
+    
+    async def _health_check(self) -> tuple[bool, str, Dict[str, Any]]:
+        """Check TTS health."""
+        if not self._settings.ENABLE_TTS:
+            return False, "TTS disabled in settings", {"enabled": False}
+        
+        if not self._pygame_initialized:
+            return False, "pygame mixer not initialized", {"pygame": False}
+        
+        # Check edge-tts import
+        try:
+            import edge_tts
+            voices = await edge_tts.list_voices()
+            return True, "TTS healthy", {
+                "pygame": True,
+                "edge_tts": True,
+                "available_voices": len(voices),
+            }
+        except Exception as e:
+            return False, f"edge-tts error: {e}", {"pygame": True, "edge_tts": False}
+    
+    # ── Public API ───────────────────────────────────────────────────────────
     
     async def say(
         self,
@@ -145,7 +245,7 @@ class TTSEngine:
             logger.warning("TTS text truncated from %d to %d chars", len(text), MAX_TTS_TEXT_LENGTH)
             text = text[:MAX_TTS_TEXT_LENGTH] + "... [truncated]"
         
-        profile = profile or VoiceProfile(self._settings.DEFAULT_TTS_VOICE)
+        profile = profile or VoiceProfile.from_name(self._settings.DEFAULT_TTS_VOICE)
         
         # Stop any currently playing speech
         self._stop_current()
@@ -171,7 +271,7 @@ class TTSEngine:
         """
         Synthesize speech and play it (runs on background thread).
         
-        Uses edge-tts for synthesis → writes temp MP3 → plays via pygame.
+        Uses edge-tts for synthesis → writes temp MP3 → decodes to PCM for audio tap → plays via pygame.
         """
         if self._stop_event.is_set():
             return
@@ -212,6 +312,14 @@ class TTSEngine:
             # Track for cleanup
             with self._lock:
                 self._temp_files.append(temp_path)
+            
+            # Decode MP3 to PCM for audio tap (non-blocking)
+            pcm_data = _decode_mp3_to_pcm(temp_path)
+            if pcm_data and _tts_audio_tap_callback:
+                try:
+                    _tts_audio_tap_callback(pcm_data)
+                except Exception as e:
+                    logger.debug("TTS audio tap callback error: %s", e)
             
             # Play via pygame
             self._play_mp3(temp_path)

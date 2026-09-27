@@ -14,7 +14,7 @@ logger = logging.getLogger("nexus.tool.system_monitor")
 
 
 def system_monitor(
-    metric: str = "all",
+    metric: str,
 ) -> str:
     """
     Get real-time system performance metrics.

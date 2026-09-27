@@ -1,0 +1,66 @@
+2026-09-18 22:45:31 | nexus.boot                     | INFO     | NEXUS AI v4.0.0 boot sequence starting...
+2026-09-18 22:45:32 | nexus.boot                     | INFO     | Platform: win32 | Python: 3.12.0
+2026-09-18 22:45:32 | nexus.boot                     | INFO     | UI mode: overlay
+2026-09-18 22:45:32 | nexus.boot                     | INFO     | Configuration loaded from C:\Users\lenovo\.nexus_ai\.env
+2026-09-18 22:45:33 | nexus.boot                     | INFO     | Runtime directories verified
+2026-09-18 22:45:34 | chromadb.telemetry.product.posthog | INFO     | Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+pygame 2.6.1 (SDL 2.28.4, Python 3.12.0)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+2026-09-18 22:45:40 | nexus.boot                     | INFO     | Degraded subsystems: wake_word, ollama
+2026-09-18 22:45:45 | nexus.boot                     | INFO     | Initializing billing and licensing subsystem...
+2026-09-18 22:45:45 | nexus.boot                     | INFO     | License loaded — current tier: free
+2026-09-18 22:45:45 | nexus.boot                     | INFO     | Initializing tool registry...
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'run_system_command' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'file_manager' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'web_search' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'web_fetch' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'browser_ghost' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'desktop_automation' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'python_interpreter' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'document_builder' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'pdf_reader' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'window_manager' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'clipboard_manager' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'local_vector_db' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'system_monitor' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'code_editor_control' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'email_client' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'workflow_macro' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'image_processor' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'data_analyzer' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'process_manager' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'notification_sender' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'calendar_manager' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Registered tool 'git_operations' (source=builtin)
+2026-09-18 22:45:46 | nexus.registry                 | INFO     | Loaded 22 built-in tools
+2026-09-18 22:45:46 | nexus.boot                     | INFO     | Tool registry initialized with 22 tools
+2026-09-18 22:45:46 | nexus.boot                     | INFO     | Initializing memory subsystem...
+2026-09-18 22:45:46 | chromadb.telemetry.product.posthog | INFO     | Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+2026-09-18 22:45:46 | nexus.boot                     | INFO     | Memory subsystem ready (ChromaDB)
+2026-09-18 22:45:46 | nexus.boot                     | INFO     | Initializing audio subsystem...
+2026-09-18 22:45:46 | nexus.boot                     | INFO     | Audio subsystem ready (on-demand initialization)
+2026-09-18 22:45:46 | nexus.boot                     | INFO     | Initializing agent orchestrator...
+2026-09-18 22:45:46 | nexus.boot                     | INFO     | Agent orchestrator ready
+2026-09-18 22:45:46 | nexus.boot                     | INFO     | Initializing ring overlay integration...
+2026-09-18 22:45:46 | nexus.overlay.config           | INFO     | Loaded overlay config from C:\Users\lenovo\.nexus_ai\overlay_config.json
+2026-09-18 22:45:46 | nexus.wake_word                | WARNING  | No Porcupine access key. Wake word disabled. Set PORCUPINE_ACCESS_KEY in .env
+2026-09-18 22:45:46 | nexus.tts                      | INFO     | TTSEngine initialized (profile: NEXUS_PRIME)
+2026-09-18 22:45:46 | nexus.overlay.integration      | INFO     | Overlay integration initialized
+2026-09-18 22:45:46 | nexus.boot                     | INFO     | Wake word daemon started
+2026-09-18 22:45:46 | websockets.server              | INFO     | server listening on 127.0.0.1:8765
+2026-09-18 22:45:46 | nexus.overlay.ws               | INFO     | Overlay WebSocket server on ws://127.0.0.1:8765/nexus/overlay
+2026-09-18 22:45:46 | nexus.overlay.audio            | INFO     | Audio tap manager started
+2026-09-18 22:45:49 | nexus.overlay.integration      | WARNING  | Overlay: wake-word recorder not found, mic tap skipped
+2026-09-18 22:45:49 | nexus.overlay.integration      | INFO     | Overlay integration started
+2026-09-18 22:45:49 | nexus.boot                     | INFO     | Ring overlay integration ready
+
+╔══════════════════════════════════════════════════════════╗
+║  NEXUS AI v4.0 — Autonomous Desktop Omni-Agent         ║
+║  Hardware: i3 7th Gen · 12GB RAM · Ollama + Groq API   ║
+╚══════════════════════════════════════════════════════════╝
+
+  (2 warnings — run 'nexus health' for details)
+2026-09-18 22:45:49 | nexus.boot                     | INFO     | Starting UI (overlay mode)...
+2026-09-18 22:45:49 | nexus.boot                     | INFO     | Overlay process started (PID: 14640)
+2026-09-18 22:45:53 | websockets.server              | INFO     | connection open
+2026-09-18 22:45:53 | nexus.overlay.ws               | INFO     | Overlay connected (1 client(s))

@@ -22,6 +22,8 @@ import io
 import os
 import logging
 import signal
+import subprocess
+import asyncio
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -47,15 +49,23 @@ def main():
     parser = argparse.ArgumentParser(
         description=f"NEXUS AI v{NEXUS_VERSION} — Autonomous Desktop Omni-Agent"
     )
+    parser.add_argument("--ui-mode", choices=["overlay", "hud", "headless"], default="overlay",
+                       help="UI mode: overlay (ring HUD), hud (CustomTkinter JARVIS), headless (CLI)")
     parser.add_argument("--headless", action="store_true",
-                       help="Run without GUI (CLI/text mode)")
+                       help="Run without GUI (CLI/text mode) - alias for --ui-mode headless")
     parser.add_argument("--verbose", "-v", action="store_true",
                        help="Enable verbose debug logging")
     parser.add_argument("--health-only", action="store_true",
                        help="Run health check and exit")
     parser.add_argument("--onboarding", action="store_true",
                        help="Force show onboarding wizard")
+    parser.add_argument("--selftest", action="store_true",
+                       help="Run audio capture selftest and exit")
     args = parser.parse_args()
+    
+    # Handle --headless alias
+    if args.headless:
+        args.ui_mode = "headless"
     
     # ─── Step 1: Configure Logging ───────────────────────────────────────────
     log_level = logging.DEBUG if args.verbose else logging.INFO
@@ -70,6 +80,7 @@ def main():
     logger = logging.getLogger("nexus.boot")
     logger.info("NEXUS AI v%s boot sequence starting...", NEXUS_VERSION)
     logger.info("Platform: %s | Python: %s", sys.platform, sys.version.split()[0])
+    logger.info("UI mode: %s", args.ui_mode)
     
     # ─── Step 2: Initialize Configuration ────────────────────────────────────
     from nexus_config.settings import get_settings, validate_on_boot, APP_ROOT
@@ -79,8 +90,6 @@ def main():
     logger.info("Configuration loaded from %s", APP_ROOT / ".env")
     
     # ─── Step 3: Create Runtime Directories ──────────────────────────────────
-    # The settings module already creates required directories at import time.
-    # Ensure temp and crash_reports exist.
     for d in ["temp", "crash_reports", "metrics", "synthesized_tools", "workflows"]:
         (APP_ROOT / d).mkdir(parents=True, exist_ok=True)
     logger.info("Runtime directories verified")
@@ -98,7 +107,6 @@ def main():
         logger.warning("Health check found issues (%d warnings, %d errors)",
                        len(health.warnings), len(health.errors))
     
-    # Print degraded subsystems
     if health.degraded_subsystems:
         logger.info("Degraded subsystems: %s", ", ".join(health.degraded_subsystems))
     
@@ -115,7 +123,6 @@ def main():
         """Handle uncaught exceptions by writing a crash report."""
         from nexus_config.crash_reporter import write_crash_report
         write_crash_report(exc_type, exc_value, exc_traceback)
-        # Call the original excepthook
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
     
     sys.excepthook = global_exception_handler
@@ -129,7 +136,7 @@ def main():
         logger.info("License loaded — current tier: %s", current_tier)
     except Exception as e:
         logger.warning("Billing subsystem initialization skipped: %s", e)
-
+    
     # ─── Step 8: Initialize Tool Registry ────────────────────────────────────
     logger.info("Initializing tool registry...")
     try:
@@ -138,14 +145,14 @@ def main():
         count = registry.load_builtin_tools()
         logger.info("Tool registry initialized with %d tools", count)
     except Exception as e:
-        logger.warning("Tool registry initialization failed: %s", e)
+        logger.error("Tool registry initialization failed: %s", e)
+        sys.exit(1)
     
     # ─── Step 9: Initialize Memory Subsystem ────────────────────────────────
     logger.info("Initializing memory subsystem...")
     try:
         from nexus_memory.vector_store import get_vector_store
         store = get_vector_store()
-        # Test connectivity
         store.heartbeat()
         logger.info("Memory subsystem ready (ChromaDB)")
     except Exception as e:
@@ -154,7 +161,6 @@ def main():
     # ─── Step 10: Initialize Audio Subsystem ─────────────────────────────────
     if settings.ENABLE_WAKE_WORD or settings.ENABLE_TTS:
         logger.info("Initializing audio subsystem...")
-        # Audio is initialized on-demand by the wake word / TTS modules
         logger.info("Audio subsystem ready (on-demand initialization)")
     
     # ─── Step 11: Initialize Agent Orchestrator ──────────────────────────────
@@ -163,14 +169,12 @@ def main():
         from nexus_brain.orchestrator import get_orchestrator
         orchestrator = get_orchestrator()
         
-        # Set up tool executor
+        # Set up tool executor (uses registry)
         async def tool_executor(tool_name: str, tool_input: Dict[str, Any], is_ui: bool) -> str:
-            """Execute a tool from the registry."""
             try:
                 if tool_name == "__list_tools__":
                     return registry.format_for_prompt()
-                
-                result = await registry.execute(tool_name, tool_input)
+                result = await registry.execute(tool_name, tool_input, is_ui)
                 return result
             except Exception as e:
                 logger.error("Tool execution failed for '%s': %s", tool_name, e)
@@ -181,6 +185,51 @@ def main():
     except Exception as e:
         logger.error("Agent orchestrator initialization failed: %s", e)
         sys.exit(1)
+    
+    # ─── Step 11b: Initialize Ring Overlay Integration ───────────────────────
+    logger.info("Initializing ring overlay integration...")
+    try:
+        from nexus_overlay.core_integration import get_overlay_integration
+        from nexus_audio.wake_word import get_wake_word_daemon
+        from nexus_audio.tts_engine import get_tts_engine
+        
+        overlay_integration = get_overlay_integration()
+        
+        wake_word_daemon = get_wake_word_daemon() if settings.ENABLE_WAKE_WORD else None
+        tts_engine = get_tts_engine() if settings.ENABLE_TTS else None
+        
+        overlay_integration.initialize(
+            orchestrator=orchestrator,
+            wake_word_daemon=wake_word_daemon,
+            tts_engine=tts_engine,
+        )
+        
+        if wake_word_daemon:
+            try:
+                wake_word_daemon.start()
+                logger.info("Wake word daemon started")
+            except Exception as e:
+                logger.warning("Failed to start wake word daemon: %s", e)
+        
+        overlay_integration.start()
+        logger.info("Ring overlay integration ready")
+    except Exception as e:
+        logger.warning("Ring overlay initialization failed (continuing without): %s", e)
+        overlay_integration = None
+    
+    # ─── Shutdown handler ───
+    def _shutdown() -> None:
+        """Clean up overlay services on exit."""
+        try:
+            from nexus_overlay.websocket_server import get_ws_server
+            from nexus_overlay.audio_tap import get_audio_tap_manager
+            ws = get_ws_server()
+            if ws.is_running:
+                ws.stop()
+            audio = get_audio_tap_manager()
+            audio.stop()
+        except Exception as e:
+            logging.getLogger("nexus.boot").debug("Shutdown cleanup error: %s", e)
     
     # ─── Step 12: Handle Ctrl+C Gracefully ──────────────────────────────────
     def signal_handler(sig, frame):
@@ -203,79 +252,141 @@ def main():
     if health.warnings:
         print(f"  ({len(health.warnings)} warnings — run 'nexus health' for details)")
     
+    # ─── Handle selftest ─────────────────────────────────────────────────────
+    if args.selftest:
+        from nexus_audio.capture import selftest
+        ok = selftest()
+        sys.exit(0 if ok else 1)
+    
     # ─── Step 14: Start UI ──────────────────────────────────────────────────
-    logger.info("Starting UI (%s mode)...", "headless" if args.headless else "GUI")
+    logger.info("Starting UI (%s mode)...", args.ui_mode)
     
-    from nexus_ui.custom_hud import build_hud, run_hud
-    hud = build_hud()
+    # Get or create persistent event loop for the orchestrator
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
     
-    # Wire orchestrator to HUD
-    def on_user_input(text: str) -> None:
-        """Callback when user submits input to the HUD."""
-        logger.info("User input received (%d chars)", len(text))
-        try:
-            # Queue the orchestrator to run
-            import asyncio
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            async def process():
-                result = await orchestrator.run(text)
-                return result
-            
-            result = loop.run_until_complete(process())
-            loop.close()
-            
-            if result:
-                hud.output_queue.put(str(result))
-        except Exception as e:
-            logger.error("Orchestrator error: %s", e)
-            hud.set_status(f"Error: {e}")
-    
-    hud.set_input_callback(on_user_input)
-    
-    # Set status
-    hud.set_status("Ready")
-    
-    # Start the UI
-    run_hud(hud, headless=args.headless)
+    if args.ui_mode == "overlay":
+        _run_overlay_ui(orchestrator, overlay_integration)
+    elif args.ui_mode == "hud":
+        _run_hud_ui(orchestrator, loop)
+    else:
+        _run_headless_ui(orchestrator, loop)
     
     # ─── Step 15: Shutdown ──────────────────────────────────────────────────
     _shutdown()
-    
     logger.info("NEXUS AI shutdown complete.")
 
 
-def _shutdown():
-    """Graceful shutdown of all subsystems."""
+def _run_overlay_ui(orchestrator, overlay_integration):
+    """Run the ring overlay as primary UI in a separate process."""
+    import subprocess
+    import sys
+    import logging
+    
     logger = logging.getLogger("nexus.boot")
     
-    # Save session context
-    try:
-        from nexus_memory.session_context import get_session_context
-        ctx = get_session_context()
-        ctx.save()
-        logger.info("Session context saved")
-    except Exception as e:
-        logger.debug("Session context save skipped: %s", e)
+    overlay_proc = subprocess.Popen([
+        sys.executable, "-m", "nexus_overlay.overlay_process"
+    ])
     
-    # Flush metrics
-    try:
-        from nexus_config.metrics import get_metrics_collector
-        metrics = get_metrics_collector()
-        metrics.shutdown()
-        logger.info("Metrics flushed")
-    except Exception as e:
-        logger.debug("Metrics flush skipped: %s", e)
+    logger.info("Overlay process started (PID: %d)", overlay_proc.pid)
     
-    # Flush audit log
     try:
-        from nexus_config.audit_logger import get_audit_logger
-        audit = get_audit_logger()
-        audit._auto_flush_loop()  # Final flush
-        logger.info("Audit log flushed")
+        overlay_proc.wait()
+    except KeyboardInterrupt:
+        overlay_proc.terminate()
+        overlay_proc.wait(timeout=2)
+
+
+def _run_hud_ui(orchestrator, loop: asyncio.AbstractEventLoop):
+    """Run the CustomTkinter JARVIS HUD with proper async integration."""
+    from nexus_ui.custom_hud import build_hud, run_hud
+    from nexus_brain.events import get_event_bus
+    
+    hud = build_hud()
+    
+    # Create async queues for event bus
+    output_queue = asyncio.Queue(maxsize=500)
+    progress_queue = asyncio.Queue(maxsize=200)
+    
+    # Wire orchestrator queues to event bus
+    orchestrator.set_queues(output_queue, progress_queue)
+    
+    # Wire HUD input callback to submit via orchestrator on the persistent loop
+    def on_user_input(text: str) -> None:
+        logger = logging.getLogger("nexus.boot")
+        logger.info("User input received (%d chars)", len(text))
+        
+        # Schedule orchestrator.run on the persistent event loop
+        async def process():
+            try:
+                result = await orchestrator.run(text)
+                return result
+            except Exception as e:
+                logger.error("Orchestrator error: %s", e)
+                return {"final_response": f"Error: {e}"}
+        
+        # Run on persistent loop (thread-safe)
+        future = asyncio.run_coroutine_threadsafe(process(), loop)
+        try:
+            result = future.result(timeout=60.0)
+        except Exception as e:
+            logger.error("Orchestrator future error: %s", e)
+            result = {"final_response": f"Error: {e}"}
+        
+        # The orchestrator now emits typed events directly to the event bus
+        # which the HUD subscribes to. No need to push to output_queue manually.
+    
+    hud.set_input_callback(on_user_input)
+    
+    # Set initial status
+    hud.set_status("Ready")
+    
+    # Start the UI (this blocks)
+    run_hud(hud, headless=False)
+    
+    # Cleanup
+    try:
+        loop.call_soon_threadsafe(loop.stop)
     except Exception:
         pass
+
+
+def _run_headless_ui(orchestrator, loop: asyncio.AbstractEventLoop):
+    """Run in headless CLI mode using persistent event loop."""
+    logger = logging.getLogger("nexus.boot")
+    
+    print("╔══════════════════════════════════════════════════════════╗")
+    print("║  JARVIS v4.0 — Autonomous Desktop Omni-Agent           ║")
+    print("║  Hardware: i3 7th Gen · 12GB RAM · Ollama + Groq API   ║")
+    print("╚══════════════════════════════════════════════════════════╝")
+    print()
+    print("Type 'exit' to quit.\n")
+    
+    while True:
+        try:
+            user_input = input("▶  ")
+        except (EOFError, KeyboardInterrupt):
+            print("\nGoodbye, Sir.")
+            break
+        
+        if user_input.lower() in ("exit", "quit"):
+            break
+        
+        try:
+            future = asyncio.run_coroutine_threadsafe(orchestrator.run(user_input), loop)
+            result = future.result(timeout=60.0)
+            
+            if result and result.get("final_response"):
+                print(result["final_response"])
+            else:
+                print("No response was returned.")
+        except Exception as e:
+            logger.error("Orchestrator error: %s", e)
+            print(f"Error: {e}")
 
 
 if __name__ == "__main__":

@@ -37,7 +37,6 @@ def mock_settings(monkeypatch):
         "ENABLE_WAKE_WORD": "false",
         "ENABLE_TTS": "false",
         "UI_THEME": "dark_platinum",
-        "TIER": "free",
         "LOG_LEVEL": "DEBUG",
         "SANDBOX_TIMEOUT_SECONDS": "5",
         "AUDIT_LOG_MAX_BYTES": "1048576",

@@ -1,0 +1,6 @@
+2026-09-18 22:17:08 | nexus.boot                     | INFO     | NEXUS AI v4.0.0 boot sequence starting...
+2026-09-18 22:17:08 | nexus.boot                     | INFO     | Platform: win32 | Python: 3.12.0
+2026-09-18 22:17:09 | nexus.boot                     | INFO     | UI mode: overlay
+2026-09-18 22:17:10 | nexus.boot                     | INFO     | Configuration loaded from C:\Users\lenovo\.nexus_ai\.env
+2026-09-18 22:17:10 | nexus.boot                     | INFO     | Runtime directories verified
+2026-09-18 22:17:13 | chromadb.telemetry.product.posthog | INFO     | Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.

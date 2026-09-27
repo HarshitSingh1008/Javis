@@ -1,888 +1,543 @@
 """
-NEXUS AI v4.0 — LangGraph ReAct engine with self-healing loop.
-Hardware: Intel i3 7th Gen · 12GB RAM · Ollama + Groq API
+NEXUS AI v4.0 — Three-Tier LangGraph ReAct Agent with Groq.
+Hardware: Intel i3 7th Gen · 12GB RAM · Groq API
 
-The orchestration graph routes every user request through:
-  1. Intent classification (local Ollama, <50ms, $0)
-  2. Context assembly (memory injection, ~10ms)
-  3. Agent reasoning (Groq 70B, ~300ms-5s)
-  4. Tool execution (parallel DAG when possible)
-  5. Capability synthesis (self-healing on tool gaps)
-  6. Memory write (persistent learning)
-  7. Response formatting
-
-Queue-driven I/O ensures the UI thread is NEVER blocked.
+Three-tier routing:
+  1. CHAT_ONLY: Greetings/small talk → Response AI only, no tools, no memory
+  2. DETERMINISTIC: Known commands (open app, etc.) → Direct tool call, no LLM
+  3. PLANNER: Everything else → Full ReAct loop with planner LLM
 """
 
 import asyncio
 import json
 import logging
+import os
+import re
 import time
 import uuid
-from typing import Optional, Dict, Any, List, AsyncIterator, Callable, Awaitable
-from functools import lru_cache
+from enum import Enum
+from typing import Optional, Dict, Any, List, AsyncIterator, Tuple
 from dataclasses import dataclass, field
 
 from nexus_config.settings import get_settings
 from nexus_config.audit_logger import get_audit_logger
 from nexus_brain.agent_state import (
     NexusState,
-    GraphNode,
     make_initial_state,
-    serialize_state,
-    validate_state_transition,
 )
-from nexus_brain.llm_router import get_llm_router, LLMResponse
-from nexus_brain.intent_classifier import get_intent_classifier
-from nexus_brain.context_builder import get_context_builder
-from nexus_brain.conversation_summarizer import get_conversation_summarizer
-from nexus_brain.task_planner import get_task_planner, DAGPlan
-from nexus_brain.playbook_engine import get_playbook_engine, PlaybookResult
-from nexus_tools.capability_synthesizer import get_capability_synthesizer
-from nexus_memory.memory_manager import get_memory_manager
-from nexus_memory.session_context import get_session_context
+from nexus_brain.timing import get_tracer
+from nexus_brain.events import (
+    get_event_bus,
+    EventType,
+    UIState,
+    AssistantTextDelta,
+    AssistantTextFinal,
+    UserMessage,
+    UIStateChange,
+    ToolProgress,
+    ToolResult,
+    emit_ui_text_delta,
+    emit_ui_text_final,
+    emit_ui_state,
+    emit_user_message,
+    emit_tool_call,
+    emit_tool_result,
+    emit_trace,
+    emit_error,
+)
+from nexus_tools.registry import get_tool_registry
+from nexus_audio.tts_engine import get_tts_engine, VoiceProfile
 
 logger = logging.getLogger("nexus.orchestrator")
 
 
-# ─── Graph Node Router Functions ──────────────────────────────────────────────
+# ─── Routing Tier Enum ────────────────────────────────────────────────────────
 
+class RouteTier(str, Enum):
+    CHAT_ONLY = "chat_only"          # Response AI only, streamed
+    DETERMINISTIC = "deterministic"  # Direct tool call, no LLM
+    PLANNER = "planner"              # Full ReAct loop
+
+
+# ─── Three-Tier Router ────────────────────────────────────────────────────────
+
+# Patterns that map directly to tools without LLM
+DETERMINISTIC_PATTERNS: List[Tuple[str, str, Dict[str, Any]]] = [
+    (r"^open\s+(notepad|editor)$", "open_application", {"name": "notepad"}),
+    (r"^open\s+(calculator|calc)$", "open_application", {"name": "calculator"}),
+    (r"^open\s+(paint|mspaint)$", "open_application", {"name": "paint"}),
+    (r"^open\s+(explorer|file explorer|files)$", "open_application", {"name": "explorer"}),
+    (r"^open\s+(cmd|command prompt|terminal)$", "open_application", {"name": "cmd"}),
+    (r"^open\s+(powershell)$", "open_application", {"name": "powershell"}),
+    (r"^open\s+(settings)$", "open_application", {"name": "settings"}),
+    (r"^launch\s+(\w+)$", "open_application", {"name": r"\1"}),
+    (r"^start\s+(\w+)$", "open_application", {"name": r"\1"}),
+]
+
+_COMPILED_DETERMINISTIC = [(re.compile(p, re.IGNORECASE), tool, args) for p, tool, args in DETERMINISTIC_PATTERNS]
+
+# Chat-only patterns (greetings, small talk)
+CHAT_ONLY_PATTERNS = [
+    r"^hello", r"^hi\b", r"^hey\b", r"^good morning", r"^good evening",
+    r"^how are you", r"^what'?s up", r"^thanks", r"^thank you",
+    r"^bye", r"^goodbye", r"^see you", r"^nice to meet",
+    r"^who are you", r"^what can you do", r"^help",
+]
+
+_COMPILED_CHAT_ONLY = [re.compile(p, re.IGNORECASE) for p in CHAT_ONLY_PATTERNS]
+
+# Response AI system prompt (Chat-Only path)
+RESPONSE_AI_SYSTEM_PROMPT = """You are NEXUS AI's response voice. Reply in natural, concise English.
+Never mention tools, function names, JSON, internal steps, or technical details.
+Never use markdown formatting unless the user asks for it.
+Be helpful, direct, and conversational."""
+
+
+def route_request(user_input: str) -> Tuple[RouteTier, Optional[str], Optional[Dict[str, Any]]]:
+    """Three-tier router: returns (tier, tool_name, tool_args) or (tier, None, None)."""
+    text = user_input.strip().lower()
+    
+    # Tier 1: Chat-only (greetings, small talk)
+    for pattern in _COMPILED_CHAT_ONLY:
+        if pattern.search(text):
+            return RouteTier.CHAT_ONLY, None, None
+    
+    # Tier 2: Deterministic commands (direct tool mapping)
+    for pattern, tool_name, default_args in _COMPILED_DETERMINISTIC:
+        match = pattern.search(text)
+        if match:
+            args = dict(default_args)
+            for key, value in args.items():
+                if isinstance(value, str) and value.startswith("\\") and value[2:].isdigit():
+                    group_idx = int(value[2:])
+                    if group_idx <= len(match.groups()):
+                        args[key] = match.group(group_idx)
+            return RouteTier.DETERMINISTIC, tool_name, args
+    
+    # Tier 3: Planner (everything else)
+    return RouteTier.PLANNER, None, None
+
+
+# ─── Tool Result Templates ──────────────────────────────────────────────────
+
+TOOL_SUCCESS_TEMPLATES = {
+    "open_application": "Opened {name}.",
+    "desktop_automation": "Done.",
+    "clipboard_manager": "Copied to clipboard.",
+    "system_monitor": "{result}",
+    "file_manager": "Done.",
+}
+
+TOOL_FAILURE_TEMPLATES = {
+    "open_application": "Couldn't open {name}. {error}",
+    "desktop_automation": "Action failed: {error}",
+    "clipboard_manager": "Clipboard error: {error}",
+    "system_monitor": "Couldn't get system info: {error}",
+    "file_manager": "File operation failed: {error}",
+}
+
+
+# ─── System Prompt ────────────────────────────────────────────────────────────
+
+SYSTEM_PROMPT = """You are NEXUS AI, an autonomous desktop agent. Complete tasks by using tools. Be concise and direct.
+
+CORE RULES:
+1. NEVER REFUSE A TASK. If a tool doesn't exist, use capability_synthesizer to create it.
+2. ALWAYS USE TOOLS FOR ACTIONS. Only skip tools for pure conversation.
+3. PYTHON INTERPRETER is your superpower for any task lacking a specific tool.
+4. BE PROACTIVE: propose logical next steps after completing tasks.
+5. REMEMBER EVERYTHING: Use local_vector_db to recall past tasks and preferences.
+
+When you need to use a tool, respond with a tool_calls array. When you have a final answer, respond directly. Never mention tools, function names, JSON, or internal steps in your final response."""
+
+
+# ─── Agent Orchestrator ──────────────────────────────────────────────────────
+
+@dataclass
 class AgentOrchestrator:
     """
-    LangGraph-style ReAct agent orchestrator.
+    Simplified LangGraph ReAct agent orchestrator.
     
-    Unlike a traditional LangGraph which uses a compiled graph object, this
-    orchestrator implements the graph as async function calls with explicit
-    state transitions. This gives us:
-      - Full control over error handling at each node
-      - Easy queue integration for UI streaming
-      - No LangGraph compilation overhead
-      - Simple testing (call any node directly)
-    
-    The graph structure (fixed — never changes):
-    
-        user_input
-            │
-        intent_classify ◄──────┐
-            │                   │
-        context_load            │
-            │                   │
-        agent_reason ───────────┤ (retry on failure)
-            │                   │
-        tool_select ────────────┤ (retry on tool error)
-            │                   │
-        tool_execute            │
-            │                   │
-        ┌───┴───┐              │
-        │ gap?  │──yes→ capability_synth ──→ tool_execute (retry)
-        └───┬───┘              │
-            │ no               │
-        memory_write            │
-            │                   │
-        response_format         │
-            │                   │
-        final ─────────────────┘
+    Uses LangGraph's create_react_agent directly for reliable tool calling.
+    The agent decides when to use tools based on the system prompt.
     """
     
-    def __init__(self):
-        self._settings = get_settings()
-        self._audit_logger = get_audit_logger()
-        self._llm_router = get_llm_router()
-        self._classifier = get_intent_classifier()
-        self._context_builder = get_context_builder()
-        self._summarizer = get_conversation_summarizer()
-        self._task_planner = get_task_planner()
-        self._synthesizer = get_capability_synthesizer()
-        self._memory_manager = get_memory_manager()
-        self._session_context = get_session_context()
-        
-        # Tool execution function (injected by the application layer)
-        self._tool_executor: Optional[Callable[[str, Dict[str, Any], bool], Awaitable[str]]] = None
-        
-        # Queue for UI streaming
-        self._output_queue: Optional[asyncio.Queue] = None
-        self._progress_queue: Optional[asyncio.Queue] = None
+    _settings: Any = field(default_factory=get_settings)
+    _audit_logger: Any = field(default_factory=get_audit_logger)
+    _agent_executor: Any = field(default=None, init=False)
+    _tool_executor: Any = field(default=None, init=False)
+    _llm_router: Any = field(default=None, init=False)
+    _output_queue: Optional[asyncio.Queue] = field(default=None, init=False)
+    _progress_queue: Optional[asyncio.Queue] = field(default=None, init=False)
+    _event_bus: Any = field(default_factory=get_event_bus)
+    _memory: Any = field(default=None, init=False)
     
-    def set_tool_executor(
-        self,
-        executor: Callable[[str, Dict[str, Any], bool], Awaitable[str]],
-    ) -> None:
-        """
-        Set the tool execution function.
+    # Concurrency control
+    _run_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    _max_concurrent_runs: int = 3
+    _active_runs: int = 0
+    
+    def __post_init__(self):
+        self._init_agent()
+    
+    def _init_agent(self):
+        """Initialize the LangGraph ReAct agent."""
+        from langchain_groq import ChatGroq
+        from langgraph.prebuilt import create_react_agent
+        from langgraph.checkpoint.memory import MemorySaver
         
-        Called by the application layer (main.py) after tool registry is initialized.
+        # Get tools from registry
+        registry = get_tool_registry()
+        registry.load_builtin_tools()
         
-        Args:
-            executor: Async callable(tool_name, tool_input, is_ui) → JSON string.
-        """
-        self._tool_executor = executor
+        # Convert registry tools to LangChain tools format
+        # For planner, only include tools needed for complex tasks
+        PLANNER_TOOLS = {
+            "run_system_command", "file_manager", "web_search", "web_manager",
+            "browser_ghost", "desktop_automation", "python_interpreter",
+            "document_builder", "local_vector_db", "process_manager",
+            "image_processor", "data_analyzer", "code_editor_control",
+            "workflow_macro", "git_operations", "capability_synthesizer",
+            "system_monitor", "window_manager", "clipboard_manager",
+            "notification_sender", "calendar_manager", "email_client",
+            "image_processor", "data_analyzer",
+        }
+        
+        tools = []
+        for name in registry.list_tools():
+            if name in PLANNER_TOOLS:
+                func = registry.get_tool(name)
+                if func:
+                    tools.append(func)
+        
+        logger.info(f"Initialized planner agent with {len(tools)} tools")
+        
+        # Create LLM (Groq primary)
+        llm = ChatGroq(
+            model="openai/gpt-oss-20b",
+            temperature=0,
+            max_tokens=8192,
+        )
+        
+        # Create LLM router for chat-only path
+        from nexus_brain.llm_router import get_llm_router
+        self._llm_router = get_llm_router()
+        
+        # Create checkpointer for conversation memory
+        self._memory = MemorySaver()
+        
+        # Initialize TTS engine
+        self._tts_engine = get_tts_engine()
+        
+        # Create ReAct agent
+        self._agent_executor = create_react_agent(
+            llm,
+            tools,
+            messages_modifier=SYSTEM_PROMPT,
+            checkpointer=self._memory,
+        )
+        
+        # Also keep the tool executor for direct tool calls
+        async def tool_executor(tool_name: str, tool_input: Dict[str, Any], is_ui: bool) -> str:
+            try:
+                result = await registry.execute(tool_name, tool_input, is_ui)
+                return result
+            except Exception as e:
+                logger.error(f"Tool execution failed for '{tool_name}': {e}")
+                return json.dumps({"success": False, "error": str(e)})
+        
+        self._tool_executor = tool_executor
     
     def set_queues(
         self,
         output_queue: asyncio.Queue,
         progress_queue: asyncio.Queue,
     ) -> None:
-        """
-        Set the output and progress queues for UI streaming.
-        
-        Args:
-            output_queue: Queue for token streaming to UI.
-            progress_queue: Queue for DAG progress events.
-        """
         self._output_queue = output_queue
         self._progress_queue = progress_queue
+        self._event_bus.set_queues(output_queue, progress_queue)
     
-    # ── Main Entry Point ──────────────────────────────────────────────────
+    def set_tool_executor(self, executor):
+        """Set a custom tool executor (for testing)."""
+        self._tool_executor = executor
     
     async def run(
         self,
         user_input: str,
         session_context: Optional[Dict[str, Any]] = None,
+        input_type: str = "text",
     ) -> NexusState:
         """
         Run a complete agent cycle from input to response.
-        
-        This is the main entry point. It executes all graph nodes in order:
-        classify → context → reason → (tool_loop) → memory → format.
-        
-        Args:
-            user_input: The user's message.
-            session_context: Optional context from the session (working memory, history).
-        
-        Returns:
-            Final NexusState with response, metrics, and execution record.
         """
-        start = time.perf_counter()
+        tracer = get_tracer()
+        trace = tracer.start_request(input_type=input_type, user_input=user_input)
+        request_id = trace.request_id
         
-        # Create initial state
-        working_memory = session_context.get("working_memory", []) if session_context else []
-        conversation_history = session_context.get("history", []) if session_context else []
+        # Emit user message event
+        await emit_user_message(request_id, user_input, source=input_type)
         
-        state = make_initial_state(
-            user_input=user_input,
-            session_id=str(uuid.uuid4()),
-            input_type="text",
-            working_memory=working_memory,
-            conversation_history=conversation_history,
-        )
+        # Concurrency control
+        async with self._run_lock:
+            while self._active_runs >= self._max_concurrent_runs:
+                await asyncio.sleep(0.1)
+            self._active_runs += 1
         
-        # ── Node: Intent Classification ─────────────────────────────────
-        state = await self._run_intent_classify(state)
-        
-        # ── LAW 1.1: Playbook Match ─────────────────────────────────────
-        # Check if the goal matches a known playbook before entering the
-        # general ReAct loop. If matched, execute the playbook instead.
-        state = await self._run_playbook_match(state)
-        if state.get("playbook_name"):
-            # Playbook was matched and executed — skip to memory write
-            logger.info("Playbook '%s' completed, skipping to memory write", state["playbook_name"])
-            state = await self._run_memory_write(state)
-            state = await self._run_response_format(state)
-            state["total_duration_ms"] = (time.perf_counter() - start) * 1000
-            return state
-        
-        # ── Node: Context Loading ───────────────────────────────────────
-        state = await self._run_context_load(state)
-        
-        # ── Agent Reasoning + Tool Execution Loop ───────────────────────
-        # This is the main ReAct loop: reason → act → observe → reason...
-        max_iterations = self._settings.AGENT_MAX_ITERATIONS
-        
-        while state.get("iteration_count", 0) < max_iterations:
-            state["iteration_count"] = state.get("iteration_count", 0) + 1
-            
-            # Check for errors from previous steps
-            errors = state.get("errors", [])
-            if len(errors) > 0 and state.get("iteration_count", 0) > max_iterations // 2:
-                logger.warning("Too many errors, terminating agent loop.")
-                break
-            
-            # ── Node: Agent Reasoning ──────────────────────────────────
-            state = await self._run_agent_reason(state)
-            
-            # Check if we have a final response (agent decided no tool needed)
-            if state.get("final_response"):
-                break
-            
-            # ── Node: Tool Selection ────────────────────────────────────
-            tool_name, tool_input, is_ui = self._extract_tool_call(state)
-            
-            if not tool_name:
-                # Agent chose to respond directly (not use a tool)
-                break
-            
-            # ── Node: Tool Execution ────────────────────────────────────
-            state = await self._run_tool_execute(state, tool_name, tool_input, is_ui)
-            
-            # ── Self-Healing: Capability Synthesis ──────────────────────
-            gap = self._detect_capability_gap(state)
-            if gap:
-                state["gap_encountered"] = gap
-                state = await self._run_capability_synthesis(state, user_input, gap)
-                
-                # If synthesis succeeded, retry the tool
-                if state.get("synthesis_triggered") and state.get("gap_recovery_tool"):
-                    state = await self._run_tool_execute(
-                        state,
-                        state["gap_recovery_tool"],
-                        tool_input,
-                        is_ui,
-                    )
-        
-        # ── Node: Memory Write ──────────────────────────────────────────
-        state = await self._run_memory_write(state)
-        
-        # ── Node: Response Format ───────────────────────────────────────
-        state = await self._run_response_format(state)
-        
-        # Finalize
-        state["total_duration_ms"] = (time.perf_counter() - start) * 1000
-        
-        # Log completion
-        self._audit_logger.log(
-            event_type="AGENT_STEP",
-            data={
-                "intent": state.get("intent"),
-                "duration_ms": state["total_duration_ms"],
-                "llm_calls": state.get("llm_calls", 0),
-                "synthesis_triggered": state.get("synthesis_triggered", False),
-                "iteration_count": state.get("iteration_count", 0),
-            },
-            module="nexus_brain.orchestrator",
-            function_name="run",
-            duration_ms=state["total_duration_ms"],
-            success=bool(state.get("final_response")),
-        )
-        
-        return state
-    
-    # ── Graph Node Implementations ─────────────────────────────────────────
-    
-    async def _run_intent_classify(self, state: NexusState) -> NexusState:
-        """Graph node: Classify user intent."""
-        node_start = time.perf_counter()
         try:
-            result = await self._classifier.classify(state.get("user_input", ""))
-            state["intent"] = result.intent
-            state["confidence"] = result.confidence
+            # Create initial state
+            working_memory = session_context.get("working_memory", []) if session_context else []
+            conversation_history = session_context.get("history", []) if session_context else []
             
-            logger.info("Intent: %s (conf=%.2f, full_agent=%s, %.0fms)",
-                result.intent, result.confidence, result.needs_full_agent, result.latency_ms)
+            state = make_initial_state(
+                user_input=user_input,
+                session_id=request_id,
+                input_type=input_type,
+                working_memory=working_memory,
+                conversation_history=conversation_history,
+            )
             
-            if self._progress_queue:
-                await self._progress_queue.put({
-                    "type": "intent",
-                    "intent": result.intent,
-                    "confidence": result.confidence,
-                    "latency_ms": result.latency_ms,
-                })
-        except Exception as e:
-            state.setdefault("errors", []).append({
-                "node": GraphNode.INTENT_CLASSIFY,
-                "error": str(e),
-                "timestamp": time.strftime("%H:%M:%S"),
-            })
-            state["intent"] = "complex_task"
-            state["confidence"] = 0.3
-        
-        return state
-    
-    async def _run_playbook_match(self, state: NexusState) -> NexusState:
-        """
-        LAW 1.1 STEP 0: Match the user's goal against the playbook library.
-        
-        If a match is found, execute the playbook and store the result.
-        If no match, the agent falls through to the general ReAct loop.
-        """
-        try:
-            from nexus_brain.playbook_engine import get_playbook_engine
+            # Three-tier router
+            tracer.mark("routed")
+            route_tier, det_tool, det_args = route_request(user_input)
+            state["route_tier"] = route_tier.value
             
-            engine = get_playbook_engine()
-            engine.set_tool_executor(self._tool_executor)
-            
-            user_input = state.get("user_input", "")
-            intent = state.get("intent")
-            
-            # STEP 0: Match
-            playbook = engine.match_playbook(user_input, intent)
-            if not playbook:
-                logger.debug("No playbook match for: %.60s", user_input)
+            if route_tier == RouteTier.CHAT_ONLY:
+                # Fast path: stream response AI directly, no tools, no memory
+                await self._run_chat_only_path(state, request_id, tracer)
+                state["total_duration_ms"] = (time.perf_counter() - trace.spans[0].start_ns / 1_000_000_000) * 1000
+                tracer.set_routed_intent(state.get("intent", "chat"))
+                tracer.end_request()
                 return state
             
-            logger.info("Playbook matched: '%s' — executing...", playbook.name)
+            elif route_tier == RouteTier.DETERMINISTIC:
+                # Fast path: direct tool execution with verification
+                await self._run_deterministic_path(state, request_id, tracer, det_tool, det_args)
+                state["total_duration_ms"] = (time.perf_counter() - trace.spans[0].start_ns / 1_000_000_000) * 1000
+                tracer.set_routed_intent(state.get("intent", "simple_command"))
+                tracer.end_request()
+                return state
             
-            if self._progress_queue:
-                await self._progress_queue.put({
-                    "type": "playbook_start",
-                    "playbook": playbook.name,
-                    "steps": len(playbook.steps),
-                })
+            # PLANNER path: full ReAct loop
+            state["route_tier"] = "planner"
             
-            # Execute the playbook
-            result = await engine.execute_playbook(
-                playbook,
-                state={"business_name": user_input},
-                progress_callback=self._playbook_progress_callback,
-            )
+            # Set UI state to thinking
+            await emit_ui_state(UIState.THINKING, "Processing...", request_id)
             
-            # Store result in state
-            state["playbook_name"] = playbook.name
-            state["playbook_step"] = len(playbook.steps)
-            state["playbook_state"] = result.playbook_state
+            # Run the planner agent
+            result = await self._run_planner_path(state, request_id, tracer, user_input)
             
-            # Build final response from playbook result
-            if result.success:
-                if result.preview_url:
-                    state["final_response"] = (
-                        f"✅ Playbook '{playbook.name}' completed successfully.\n"
-                        f"Preview URL: {result.preview_url}\n"
-                        f"Duration: {result.duration_ms:.0f}ms"
-                    )
-                elif result.campaign_id:
-                    state["final_response"] = (
-                        f"✅ Playbook '{playbook.name}' completed successfully.\n"
-                        f"Campaign ID: {result.campaign_id}\n"
-                        f"Duration: {result.duration_ms:.0f}ms"
-                    )
-                else:
-                    state["final_response"] = (
-                        f"✅ Playbook '{playbook.name}' completed successfully.\n"
-                        f"Duration: {result.duration_ms:.0f}ms"
-                    )
-            else:
-                failed = [f"  • {sid}: {err}" for sid, err in result.failed_steps[:3]]
-                state["final_response"] = (
-                    f"⚠️ Playbook '{playbook.name}' completed with {len(result.failed_steps)} failed steps.\n"
-                    + "\n".join(failed) +
-                    f"\nDuration: {result.duration_ms:.0f}ms"
-                )
+            state["final_response"] = result.get("final_response", "Task completed.")
+            state["intent"] = result.get("intent", "general")
+            state["llm_calls"] = result.get("llm_calls", 1)
+            state["total_duration_ms"] = (time.perf_counter() - trace.spans[0].start_ns / 1_000_000_000) * 1000
+            tracer.set_routed_intent(state.get("intent", "general"))
+            tracer.end_request()
             
-            # Store project memory
-            mem_id = engine.store_project_memory(user_input, playbook.name, result)
-            if mem_id:
-                state["project_memory_id"] = mem_id
+            return state
             
-            if self._progress_queue:
-                await self._progress_queue.put({
-                    "type": "playbook_end",
-                    "playbook": playbook.name,
-                    "success": result.success,
-                    "duration_ms": result.duration_ms,
-                })
-            
-        except Exception as e:
-            logger.error("Playbook execution failed: %s", e)
-            state.setdefault("errors", []).append({
-                "node": "playbook_match",
-                "error": str(e),
-                "timestamp": time.strftime("%H:%M:%S"),
-            })
-        
-        return state
+        finally:
+            async with self._run_lock:
+                self._active_runs = max(0, self._active_runs - 1)
     
-    async def _playbook_progress_callback(self, step_id: str, status: str) -> None:
-        """Callback for playbook step progress updates."""
-        if self._progress_queue:
-            await self._progress_queue.put({
-                "type": "playbook_step",
-                "step_id": step_id,
-                "status": status,
-            })
+    # ── Helper Methods ──────────────────────────────────────────────────────
     
-    async def _run_context_load(self, state: NexusState) -> NexusState:
-        """Graph node: Load context from memory and assemble system prompt."""
-        try:
-            # Get tool descriptions
-            tool_descriptions = ""
-            if self._tool_executor:
-                # Request tool descriptions from registry via a special call
-                try:
-                    tool_list = await self._tool_executor(
-                        "__list_tools__", {}, False
-                    )
-                    if tool_list:
-                        tool_descriptions = tool_list
-                except Exception:
-                    tool_descriptions = "Standard tools available."
-            
-            # Build system prompt
-            prompt = await self._context_builder.build_prompt(
-                state,
-                tool_descriptions,
-            )
-            state["system_prompt"] = prompt
-            
-            # Load working memory
-            wm = self._session_context.get("working_memory", [])
-            state["working_memory"] = wm[-20:]  # Keep last 20
-            
-        except Exception as e:
-            state.setdefault("errors", []).append({
-                "node": GraphNode.CONTEXT_LOAD,
-                "error": str(e),
-                "timestamp": time.strftime("%H:%M:%S"),
-            })
-            state["system_prompt"] = "You are NEXUS AI."
+    async def _run_chat_only_path(self, state: NexusState, request_id: str, tracer) -> None:
+        """Fast path: stream response AI directly, no tools, no memory."""
+        await emit_ui_state(UIState.THINKING, "Generating response...", request_id)
+        tracer.mark("llm_request_sent")
         
-        return state
+        messages = [
+            {"role": "system", "content": RESPONSE_AI_SYSTEM_PROMPT},
+            {"role": "user", "content": state["user_input"]},
+        ]
+        
+        first_token = True
+        full_content = ""
+        
+        async for token in self._llm_router.stream(
+            messages,
+            role="voice",
+            temperature=0.3,
+            max_tokens=500,
+        ):
+            if first_token:
+                tracer.mark("first_token")
+                first_token = False
+            await emit_ui_text_delta(request_id, token, is_first=first_token)
+            full_content += token
+        
+        tracer.mark("ui_rendered")
+        await emit_ui_text_final(request_id, full_content, intent="chat")
+        await self._speak_response(full_content)
+        await emit_ui_state(UIState.IDLE, "Ready", request_id)
+        
+        # Update state
+        state["final_response"] = full_content
+        state["intent"] = "chat"
+        state["llm_calls"] = 1
     
-    async def _run_agent_reason(self, state: NexusState) -> NexusState:
-        """Graph node: LLM reasoning step."""
-        try:
-            messages = self._build_llm_messages(state)
-            
-            if self._output_queue:
-                response_stream = self._llm_router.stream(messages)
-                full_content = ""
-                async for token in response_stream:
-                    full_content += token
-                    await self._output_queue.put({"type": "token", "content": token})
-                
-                response = LLMResponse(content=full_content, provider="groq", model="streamed")
-            else:
-                response = await self._llm_router.generate(messages)
-            
-            state["llm_calls"] = state.get("llm_calls", 0) + 1
-            
-            # Parse the response — look for tool calls or final answer
-            content = response.content.strip()
-            
-            # Check if the response contains a tool call
-            state["_last_llm_response"] = content
-            
-            # If no tool call in response and agent is answering directly
-            if "```tool" not in content and "TOOL CALL:" not in content:
-                state["final_response"] = content
-            
-        except Exception as e:
-            state.setdefault("errors", []).append({
-                "node": GraphNode.AGENT_REASON,
-                "error": str(e),
-                "timestamp": time.strftime("%H:%M:%S"),
-            })
-            state["final_response"] = f"I encountered an error while processing your request: {e}"
-        
-        return state
-    
-    def _extract_tool_call(self, state: NexusState) -> tuple:
-        """
-        Extract tool call from the LLM response.
-        
-        The LLM signals tool calls with:
-          TOOL CALL: tool_name
-          PARAMS: {"key": "value"}
-        
-        Or with markdown:
-          ```tool
-          {"tool": "tool_name", "input": {...}}
-          ```
-        
-        Returns:
-            (tool_name, tool_input, is_ui) or (None, None, False) if no tool call.
-        """
-        content = state.get("_last_llm_response", "")
-        
-        # Pattern 1: Structured tool call format
-        if "TOOL CALL:" in content:
-            lines = content.split("\n")
-            tool_name = ""
-            tool_input: Dict[str, Any] = {}
-            for line in lines:
-                if line.startswith("TOOL CALL:"):
-                    tool_name = line.split("TOOL CALL:")[-1].strip()
-                elif line.startswith("PARAMS:"):
-                    params_str = line.split("PARAMS:")[-1].strip()
-                    try:
-                        tool_input = json.loads(params_str)
-                    except json.JSONDecodeError:
-                        tool_input = {"raw": params_str}
-            
-            if tool_name:
-                return tool_name, tool_input, False
-        
-        # Pattern 2: Markdown tool block
-        if "```tool" in content:
-            import re
-            match = re.search(r"```tool\s*\n(.*?)\n```", content, re.DOTALL)
-            if match:
-                try:
-                    data = json.loads(match.group(1).strip())
-                    tool_name = data.get("tool", "")
-                    tool_input = data.get("input", {})
-                    is_ui = data.get("is_ui", False)
-                    return tool_name, tool_input, is_ui
-                except (json.JSONDecodeError, KeyError):
-                    pass
-        
-        return None, None, False
-    
-    async def _run_tool_execute(
+    async def _run_deterministic_path(
         self,
         state: NexusState,
+        request_id: str,
+        tracer,
         tool_name: str,
-        tool_input: Dict[str, Any],
-        is_ui: bool,
-    ) -> NexusState:
-        """Graph node: Execute a tool call."""
-        node_start = time.perf_counter()
+        tool_args: Dict[str, Any],
+    ) -> None:
+        """Fast path: direct tool execution with verification, no planner LLM."""
+        await emit_ui_state(UIState.THINKING, f"Executing {tool_name}...", request_id)
+        tracer.mark("tool_started")
         
-        if self._progress_queue:
-            await self._progress_queue.put({
-                "type": "tool_start",
-                "tool": tool_name,
-                "input": tool_input,
-            })
+        # Execute tool with verification
+        tool_result = await self._execute_tool_verified(request_id, tool_name, tool_args)
+        
+        tracer.mark("tool_verified")
+        
+        # Generate response from template (no second LLM call)
+        if tool_result.success and tool_result.verified:
+            template = TOOL_SUCCESS_TEMPLATES.get(tool_name, "Done.")
+            response = template.format(name=tool_args.get("name", ""), result=tool_result.result or "")
+        else:
+            template = TOOL_FAILURE_TEMPLATES.get(tool_name, "Action failed: {error}")
+            response = template.format(name=tool_args.get("name", ""), error=tool_result.error or "Unknown error")
+        
+        # Stream the template response (instant)
+        await emit_ui_text_delta(request_id, response, is_first=True)
+        await emit_ui_text_final(request_id, response, intent="deterministic")
+        await self._speak_response(response)
+        await emit_ui_state(UIState.IDLE, "Ready", request_id)
+        
+        state["final_response"] = response
+        state["intent"] = "simple_command"
+        state["llm_calls"] = 0
+    
+    async def _execute_tool_verified(
+        self,
+        request_id: str,
+        tool_name: str,
+        tool_args: Dict[str, Any],
+    ) -> ToolResult:
+        """Execute tool and verify effect (for deterministic path)."""
+        start = time.perf_counter()
+        
+        await emit_tool_call(request_id, tool_name, tool_args, False)
         
         try:
             if self._tool_executor is None:
-                raise RuntimeError("Tool executor not set — call set_tool_executor() first.")
+                raise RuntimeError("Tool executor not set")
             
-            output = await self._tool_executor(tool_name, tool_input, is_ui)
+            output = await self._tool_executor(tool_name, tool_args, False)
             
-            # Parse output
             try:
                 parsed = json.loads(output)
                 success = parsed.get("success", True)
-                result_text = parsed.get("result", parsed.get("error", output))
+                result_data = parsed.get("result", parsed.get("error", output))
+                verified = parsed.get("verified", False)
+                verification_detail = parsed.get("verification_detail", "")
             except (json.JSONDecodeError, TypeError):
                 success = True
-                result_text = output
+                result_data = output
+                verified = False
+                verification_detail = ""
             
-            state["tool_outputs"][f"tool_{state['iteration_count']}"] = output
-            state["completed_nodes"].append(f"tool_{state['iteration_count']}")
+            duration_ms = (time.perf_counter() - start) * 1000
             
-            if self._progress_queue:
-                await self._progress_queue.put({
-                    "type": "tool_end",
-                    "tool": tool_name,
-                    "success": success,
-                    "duration_ms": (time.perf_counter() - node_start) * 1000,
-                })
-            
-            # Add tool result to conversation context
-            state.setdefault("conversation_history", []).append({
-                "role": "assistant",
-                "content": f"[Tool {tool_name} returned: {result_text[:500]}]",
-            })
+            return ToolResult(
+                request_id=request_id,
+                tool_name=tool_name,
+                success=success,
+                result=result_data,
+                error=parsed.get("error") if not success else None,
+                duration_ms=duration_ms,
+                verified=verified,
+                verification_detail=verification_detail,
+            )
             
         except Exception as e:
-            error_msg = f"{type(e).__name__}: {e}"
-            state["tool_outputs"][f"tool_{state['iteration_count']}_error"] = error_msg
-            state.setdefault("failed_nodes", []).append(f"tool_{state['iteration_count']}")
-            
-            state.setdefault("errors", []).append({
-                "node": GraphNode.TOOL_EXECUTE,
-                "tool": tool_name,
-                "error": error_msg,
-                "timestamp": time.strftime("%H:%M:%S"),
-            })
-            
-            if self._progress_queue:
-                await self._progress_queue.put({
-                    "type": "tool_error",
-                    "tool": tool_name,
-                    "error": error_msg,
-                })
-        
-        return state
+            duration_ms = (time.perf_counter() - start) * 1000
+            return ToolResult(
+                request_id=request_id,
+                tool_name=tool_name,
+                success=False,
+                error=f"{type(e).__name__}: {e}",
+                duration_ms=duration_ms,
+            )
     
-    def _detect_capability_gap(self, state: NexusState) -> Optional[str]:
-        """
-        Detect if the last tool execution indicates a capability gap.
-        
-        Checks for these signals:
-          - Tool returned ModuleNotFoundError or ImportError
-          - Tool returned "No capability for" or similar
-          - Tool execution raised NotImplementedError
-          - Last error contains "no tool" or "not found"
-        
-        Args:
-            state: Current agent state.
-        
-        Returns:
-            Gap description string if gap detected, None otherwise.
-        """
-        errors = state.get("errors", [])
-        if not errors:
-            return None
-        
-        last_error = errors[-1]
-        error_text = last_error.get("error", "")
-        tool_name = last_error.get("tool", "")
-        
-        gap_signals = [
-            "ModuleNotFoundError", "ImportError",
-            "No capability", "not found", "no tool",
-            "not implemented", "NotImplementedError",
-            "unavailable", "missing",
-        ]
-        
-        for signal in gap_signals:
-            if signal.lower() in error_text.lower():
-                return f"Need a tool for: {tool_name or 'unknown operation'}. Error: {error_text[:200]}"
-        
-        return None
+    async def _speak_response(self, text: str) -> None:
+        """Speak the response using TTS engine."""
+        if not text or not text.strip():
+            return
+        try:
+            await self._tts_engine.say(text.strip())
+        except Exception as e:
+            logger.warning(f"TTS failed: {e}")
     
-    async def _run_capability_synthesis(
+    async def _run_planner_path(
         self,
         state: NexusState,
-        original_task: str,
-        gap: str,
-    ) -> NexusState:
-        """Graph node: Synthesize a new capability to fill a detected gap."""
-        if state.get("synthesis_attempts", 0) >= self._settings.SYNTHESIS_MAX_RETRIES:
-            logger.warning("Synthesis max retries reached for gap: %s", gap)
-            return state
-        
-        state["synthesis_attempts"] = state.get("synthesis_attempts", 0) + 1
-        
-        if self._progress_queue:
-            await self._progress_queue.put({
-                "type": "synthesis_start",
-                "gap": gap,
-                "attempt": state["synthesis_attempts"],
-            })
+        request_id: str,
+        tracer,
+        user_input: str,
+    ) -> Dict[str, Any]:
+        """Full ReAct loop with planner LLM."""
+        await emit_ui_state(UIState.THINKING, "Processing...", request_id)
+        tracer.mark("llm_request_sent")
         
         try:
-            # Get current tool list
-            tools_list = ",".join(state.get("completed_nodes", [])) or "standard tools"
+            config = {
+                "configurable": {"thread_id": state["session_id"]},
+                "recursion_limit": 50,
+            }
             
-            result = await self._synthesizer.synthesize(
-                task=original_task,
-                failure_reason=gap,
-                tools_list=tools_list,
-            )
+            full_content = ""
+            first_token = True
             
-            if result.success and result.registered:
-                state["synthesis_triggered"] = True
-                state["gap_recovery_tool"] = result.tool_name
-                
-                if self._progress_queue:
-                    await self._progress_queue.put({
-                        "type": "synthesis_end",
-                        "tool_name": result.tool_name,
-                        "success": True,
-                        "attempts": len(result.attempts),
-                    })
-            else:
-                logger.warning("Synthesis failed after %d attempts for gap: %s",
-                    len(result.attempts), gap)
-                
-                if self._progress_queue:
-                    await self._progress_queue.put({
-                        "type": "synthesis_end",
-                        "tool_name": result.tool_name,
-                        "success": False,
-                        "attempts": len(result.attempts),
-                        "error": f"All {len(result.attempts)} attempts failed",
-                    })
-        
-        except Exception as e:
-            logger.error("Synthesis error: %s", e)
-            state.setdefault("errors", []).append({
-                "node": GraphNode.CAPABILITY_SYNTH,
-                "error": str(e),
-                "timestamp": time.strftime("%H:%M:%S"),
-            })
-        
-        return state
-    
-    async def _run_memory_write(self, state: NexusState) -> NexusState:
-        """Graph node: Persist task outcome to memory."""
-        try:
-            task = state.get("user_input", "")
-            outcome = state.get("final_response", "")[:200]
-            tools_used = list(state.get("tool_outputs", {}).keys())
-            duration = state.get("total_duration_ms", 0)
-            success = bool(state.get("final_response"))
-            session_id = state.get("session_id", "")
-            complexity = state.get("intent", "simple")
+            async for chunk in self._agent_executor.astream(
+                {"messages": [("user", user_input)]},
+                config={"configurable": {"thread_id": state["session_id"]}, "recursion_limit": 50},
+                stream_mode="values",
+            ):
+                messages = chunk.get("messages", [])
+                if messages:
+                    last_msg = messages[-1]
+                    if hasattr(last_msg, 'content') and last_msg.content:
+                        content = last_msg.content
+                        if content and not content.startswith("{"):  # Not a tool call JSON
+                            if first_token:
+                                tracer.mark("first_token")
+                                first_token = False
+                            
+                            await emit_ui_text_delta(request_id, content, is_first=first_token)
+                            full_content += content
             
-            self._memory_manager.store_episodic(
-                task=task,
-                outcome=outcome,
-                tools=tools_used,
-                dur=duration,
-                success=success,
-                sid=session_id,
-                comp=complexity or "simple",
-            )
+            if not full_content:
+                full_content = "Task completed."
             
-            # Store to session context
-            self._session_context.add_task({
-                "task": task,
-                "success": success,
-                "duration_ms": duration,
-                "timestamp": time.strftime("%H:%M:%S"),
-                "tools": tools_used,
-            })
+            await emit_ui_text_final(request_id, full_content, intent="general")
+            await self._speak_response(full_content)
+            await emit_ui_state(UIState.IDLE, "Ready", request_id)
             
-            # ── LAW B5: Free-tier usage metering ──────────────────────
-            # Increment the local task counter for free-tier users.
-            # This is advisory/UX only (LAW B5) — the server is the
-            # authoritative source for enforcing billing limits.
-            try:
-                from nexus_billing.usage_metering import increment_and_check
-                
-                tier = self._settings.TIER
-                allowed, used, limit = increment_and_check(tier)
-                if not allowed:
-                    logger.warning(
-                        "Free-tier task limit reached (%d/%d) — user will see block on next task",
-                        used, limit,
-                    )
-                state["usage_allowed"] = allowed
-                state["usage_task_count"] = used
-                state["usage_limit"] = limit
-            except Exception as metering_err:
-                logger.debug("Usage metering skipped: %s", metering_err)
-                state["usage_allowed"] = True
-                state["usage_task_count"] = 0
-                state["usage_limit"] = -1
-            
-            # Extract and store preferences from conversation
-            if state.get("conversation_history"):
-                await self._extract_preferences(state)
-        
-        except Exception as e:
-            logger.error("Memory write failed: %s", e)
-        
-        return state
-    
-    async def _extract_preferences(self, state: NexusState) -> None:
-        """
-        Extract user preferences from the conversation.
-        
-        Uses a cheap LLM call to extract facts about the user's environment.
-        """
-        try:
-            history = state.get("conversation_history", [])
-            if len(history) < 2:
-                return
-            
-            last_turns = history[-4:]  # Last 4 messages
-            context = "\n".join(f"{m['role']}: {m['content'][:300]}" for m in last_turns)
-            
-            extraction_prompt = f"""From this conversation, extract any facts about the user's environment, preferences, or habits that would be useful in future sessions. 
-
-Conversation:
-{context}
-
-If no useful facts found, respond with: []
-Otherwise respond with JSON array of strings, each a fact:"""
-
-            response = await self._llm_router.generate(
-                messages=[
-                    {"role": "system", "content": "Extract user preferences from conversation. Respond with JSON array only."},
-                    {"role": "user", "content": extraction_prompt},
-                ],
-                temperature=0.1,
-                max_tokens=200,
-                prefer_provider="ollama",
-            )
-            
-            if response.success:
-                import re
-                # Extract JSON array
-                match = re.search(r'\[.*?\]', response.content, re.DOTALL)
-                if match:
-                    facts = json.loads(match.group(0))
-                    for fact in facts:
-                        self._memory_manager.store_preference(str(fact))
-        
-        except Exception as e:
-            logger.debug("Preference extraction failed: %s", e)
-    
-    async def _run_response_format(self, state: NexusState) -> NexusState:
-        """Graph node: Format the final response."""
-        response = state.get("final_response", "")
-        if not response:
-            # Build a summary from tool outputs
-            outputs = state.get("tool_outputs", {})
-            if outputs:
-                parts = []
-                for tool_name, output in list(outputs.items())[:3]:
-                    try:
-                        parsed = json.loads(output)
-                        result = parsed.get("result", parsed.get("error", output))
-                        parts.append(f"• {tool_name}: {str(result)[:200]}")
-                    except (json.JSONDecodeError, TypeError):
-                        parts.append(f"• {tool_name}: {output[:200]}")
-                
-                state["final_response"] = "Here are the results:\n" + "\n".join(parts)
-            else:
-                state["final_response"] = "Task completed. No specific output to report."
-        
-        return state
-    
-    # ── LLM Message Builder ───────────────────────────────────────────────
-    
-    def _build_llm_messages(self, state: NexusState) -> List[Dict[str, str]]:
-        """
-        Build the messages list for the LLM call.
-        
-        Structure:
-          1. System prompt (assembled by context builder)
-          2. Conversation history (trimmed)
-          3. Working memory context
-          4. Current user input
-        
-        Args:
-            state: Current agent state.
-        
-        Returns:
-            List of message dicts for the LLM.
-        """
-        messages: List[Dict[str, str]] = [
-            {"role": "system", "content": state.get("system_prompt", BASE_SYSTEM_FALLBACK)},
-        ]
-        
-        # Add conversation history
-        history = state.get("conversation_history", [])
-        trimmed_history = self._context_builder.build_conversation_context(
-            history,
-            max_messages=self._settings.CONVERSATION_CONTEXT_WINDOW,
-        )
-        messages.extend(trimmed_history)
-        
-        # Add conversation summary if available
-        summary = state.get("conversation_summary")
-        if summary:
-            messages.append({
-                "role": "system",
-                "content": f"[Earlier conversation context: {summary}]",
-            })
-        
-        # Add current user input
-        messages.append({
-            "role": "user",
-            "content": state.get("user_input", ""),
-        })
-        
-        # Add tool results as context
-        tool_outputs = state.get("tool_outputs", {})
-        if tool_outputs:
-            recent_outputs = list(tool_outputs.items())[-3:]
-            for tool_name, output in recent_outputs:
-                messages.append({
-                    "role": "system",
-                    "content": f"[Tool {tool_name} result: {str(output)[:500]}]",
-                })
-        
-        return messages
+            return {
+                "final_response": full_content,
+                "intent": "general",
+                "llm_calls": 1,
+            }
+        finally:
+            pass
 
 
-# ─── Base system fallback (if context builder fails to produce one) ────────────
+# ─── Singleton Accessor ──────────────────────────────────────────────────────
 
-BASE_SYSTEM_FALLBACK = """You are NEXUS AI, an autonomous desktop agent. Help the user with their computer tasks. Be concise and direct. Use tools when needed, but don't use tools for simple questions you can answer from your knowledge."""
+_agent_orchestrator_instance: Optional[AgentOrchestrator] = None
 
 
-@lru_cache(maxsize=1)
 def get_orchestrator() -> AgentOrchestrator:
-    """
-    Return the singleton AgentOrchestrator instance.
-    
-    Returns:
-        AgentOrchestrator: The singleton orchestrator instance.
-    """
-    return AgentOrchestrator()
+    global _agent_orchestrator_instance
+    if _agent_orchestrator_instance is None:
+        _agent_orchestrator_instance = AgentOrchestrator()
+    return _agent_orchestrator_instance
+
+
+def reset_orchestrator():
+    global _agent_orchestrator_instance
+    _agent_orchestrator_instance = None

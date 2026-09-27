@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
+        }
+
+        #app {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ─── Ring Canvas (Centerpiece) ─── */
+        #ring-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            min-height: 280px;
+        }
+
+        #ring {
+            display: block;
+        }
+
+        /* ─── State Indicator Ring (Pulsing border) ─── */
+        #state-indicator {
+            position: absolute;
+            top: -8px;
+            left: -8px;
+            right: -8px;
+            bottom: -8px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            pointer-events: none;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            display: none;
+        }
+
+        /* ─── Conversation History ─── */
+        #conversation {
+            flex: 0 0 180px;
+            max-height: 180px;
+            overflow-y: auto;
+            padding: 12px 16px;
+            background: linear-gradient(180deg, transparent 0%, rgba(0, 10, 20, 0.6) 100%);
+            border-top: 1px solid rgba(63, 211, 255, 0.1);
+        }
+
+        .msg {
+            margin-bottom: 8px;
+            line-height: 1.4;
+            font-size: 13px;
+            opacity: 0;
+            transform: translateY(10px);
+            animation: msg-in 0.3s ease forwards;
+        }
+
+        @keyframes msg-in {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .msg-user {
+            color: #8be9ff;
+            text-align: right;
+        }
+
+        .msg-user::before {
+            content: "YOU  ";
+            font-weight: 600;
+            color: #3fd3ff;
+            opacity: 0.7;
+        }
+
+        .msg-assistant {
+            color: #e0f7ff;
+            text-align: left;
+        }
+
+        .msg-assistant::before {
+            content: "NEXUS  ";
+            font-weight: 600;
+            color: #3fffb0;
+            opacity: 0.7;
+        }
+
+        .msg-system {
+            color: #ffab3f;
+            text-align: center;
+            font-style: italic;
+            font-size: 12px;
+        }
+
+        .msg-error {
+            color: #ff5252;
+            text-align: center;
+        }
+
+        /* ─── Input Area ─── */
+        #input-area {
+            padding: 16px;
+            background: linear-gradient(0deg, rgba(0, 10, 20, 0.85) 0%, transparent 100%);
+            border-top: 1px solid rgba(63, 211, 255, 0.1);
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #mic-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, rgba(63, 211, 255, 0.2), rgba(63, 211, 255, 0.05));
+            border: 1px solid rgba(63, 211, 255, 0.3);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        #mic-btn:hover {
+            background: linear-gradient(135deg, rgba(63, 211, 255, 0.4), rgba(63, 211, 255, 0.15));
+            border-color: #3fd3ff;
+            box-shadow: 0 0 20px rgba(63, 211, 255, 0.4);
+        }
+
+        #mic-btn:active {
+            transform: scale(0.95);
+        }
+
+        #mic-btn.listening {
+            background: linear-gradient(135deg, rgba(63, 211, 255, 0.6), rgba(63, 211, 255, 0.3));
+            border-color: #3fd3ff;
+            box-shadow: 0 0 30px rgba(63, 211, 255, 0.6);
+            animation: mic-pulse 1s ease-in-out infinite;
+        }
+
+        #mic-btn.speaking {
+            background: linear-gradient(135deg, rgba(63, 255, 176, 0.6), rgba(63, 255, 176, 0.3));
+            border-color: #3fffb0;
+            box-shadow: 0 0 30px rgba(63, 255, 176, 0.6);
+        }
+
+        #mic-btn.processing {
+            background: linear-gradient(135deg, rgba(255, 171, 63, 0.4), rgba(255, 171, 63, 0.15));
+            border-color: #ffab3f;
+            cursor: wait;
+        }
+
+        @keyframes mic-pulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(63, 211, 255, 0.5); }
+            50% { box-shadow: 0 0 40px rgba(63, 211, 255, 0.8); }
+        }
+
+        #mic-btn svg {
+            width: 24px;
+            height: 24px;
+            stroke: #3fd3ff;
+            transition: stroke 0.3s ease;
+        }
+
+        #mic-btn.listening svg { stroke: #3fd3ff; }
+        #mic-btn.speaking svg { stroke: #3fffb0; }
+        #mic-btn.processing svg { stroke: #ffab3f; }
+
+        #text-input {
+            flex: 1;
+            height: 48px;
+            padding: 0 16px;
+            border-radius: 24px;
+            border: 1px solid rgba(63, 211, 255, 0.2);
+            background: rgba(0, 10, 20, 0.6);
+            color: #e0f7ff;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        #text-input::placeholder {
+            color: rgba(63, 211, 255, 0.4);
+        }
+
+        #text-input:focus {
+            border-color: #3fd3ff;
+            box-shadow: 0 0 20px rgba(63, 211, 255, 0.2), inset 0 0 20px rgba(63, 211, 255, 0.05);
+        }
+
+        #send-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, #3fd3ff, #3fffb0);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        #send-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(63, 211, 255, 0.5);
+        }
+
+        #send-btn:active {
+            transform: scale(0.95);
+        }
+
+        #send-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #send-btn svg {
+            width: 20px;
+            height: 20px;
+            stroke: #000814;
+        }
+
+        /* ─── Scrollbar ─── */
+        #conversation::-webkit-scrollbar {
+            width: 4px;
+        }
+        #conversation::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        #conversation::-webkit-scrollbar-thumb {
+            background: rgba(63, 211, 255, 0.3);
+            border-radius: 2px;
+        }
+
+        /* ─── Selection ─── */
+        ::selection {
+            background: rgba(63, 211, 255, 0.3);
+        }
+
+        /* ─── Responsive ─── */
+        @media (max-width: 380px) {
+            #conversation { flex: 0 0 140px; max-height: 140px; }
+            #ring-container { min-height: 220px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Ring Centerpiece -->
+        <div id="ring-container">
+            <div id="state-indicator"></div>
+            <canvas id="ring"></canvas>
+        </div>
+
+        <!-- Conversation History -->
+        <div id="conversation" role="log" aria-live="polite"></div>
+
+        <!-- Input Area -->
+        <div id="input-area">
+            <div class="input-row">
+                <button id="mic-btn" type="button" aria-label="Voice input" title="Hold to speak (or click for push-to-talk)">
+                    <svg id="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-6 0z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" y1="19" x2="12" y2="22"></line>
+                    </svg>
+                </button>
+                <input type="text" id="text-input" placeholder="Ask NEXUS anything..." autocomplete="off" spellcheck="false" />
+                <button id="send-btn" type="button" aria-label="Send message" title="Send (Enter)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            'use strict';
+
+            // ─── DOM Elements ───
+            const canvas = document.getElementById('ring');
+            const ctx = canvas.getContext('2d');
+            const stateIndicator = document.getElementById('state-indicator');
+            const conversation = document.getElementById('conversation');
+            const micBtn = document.getElementById('mic-btn');
+            const micIcon = document.getElementById('mic-icon');
+            const textInput = document.getElementById('text-input');
+            const sendBtn = document.getElementById('send-btn');
+
+            // ─── Configuration ───
+            var CONFIG = {
+                ringCount: 3,
+                ringBaseRadiusRatio: 0.22,
+                ringMultipliers: [1.0, 0.78, 0.58],
+                ringLineWidths: [2.5, 1.5, 1.5],
+                ringDashPatterns: [[14, 6], [2, 10], [14, 6]],
+                ringRotationSpeeds: [1.0, -1.3, 1.6],
+                ringShadowBlur: 14,
+                ringGlobalAlphas: [0.85, 0.7, 0.55],
+
+                barCount: 40,
+                barBaseRadiusRatio: 1.15,
+                barMinLength: 10,
+                barMaxLength: 44,
+                barLineWidth: 2,
+                barShadowBlur: 8,
+
+                coreRadiusRatio: 0.32,
+                coreShadowBlur: 20,
+
+                particleBurstCount: 18,
+                particleBaseSpeed: 0.6,
+                particleSpeedVariance: 1.2,
+                particleBaseLife: 1.0,
+                particleDecayMin: 0.01,
+                particleDecayMax: 0.025,
+                particleSize: 2.2,
+                particleShadowBlur: 10,
+
+                idleBreatheSpeed: 1100,
+                idleBreatheAmplitude: 0.03,
+                activeBreatheFactor: 0.08,
+
+                sweepSpeedFactor: 0.03,
+                sweepArcAngle: 0.5,
+
+                errorJitterProbability: 0.15,
+                errorJitterAlpha: 0.25,
+            };
+
+            var STATES = {
+                idle:        { color: '#3fd3ff', accent: '#8be9ff', speed: 1.0 },
+                listening:   { color: '#3fd3ff', accent: '#c9f6ff', speed: 1.6 },
+                thinking:    { color: '#ffab3f', accent: '#ffd9a0', speed: 2.4 },
+                speaking:    { color: '#3fffb0', accent: '#b0ffdf', speed: 2.0 },
+                error:       { color: '#ff5252', accent: '#ffb0b0', speed: 3.0 },
+                transcribing:{ color: '#ffab3f', accent: '#ffd9a0', speed: 2.0 }
+            };
+
+            // ─── State Variables ───
+            var state = 'idle';
+            var audioLevel = 0.2;
+            var audioTarget = 0.2;
+            var barValues = new Array(CONFIG.barCount).fill(0.1);
+            var particles = [];
+            var rotation = 0;
+            var sweepAngle = 0;
+            var lastStateChange = 0;
+            var stateDebounceMs = 150;
+
+            // Mic state
+            var isRecording = false;
+            var mediaRecorder = null;
+            var audioChunks = [];
+
+            // WebSocket
+            var ws = null;
+            var wsUrl = 'ws://127.0.0.1:8765/nexus/overlay';
+            var reconnectDelay = 1000;
+            var maxReconnectDelay = 30000;
+
+            // ─── State Display Helpers ───
+            const STATE_LABELS = {
+                idle: 'IDLE',
+                listening: 'LISTENING',
+                thinking: 'PROCESSING',
+                speaking: 'SPEAKING',
+                error: 'ERROR',
+                transcribing: 'TRANSCRIBING'
+            };
+
+            function updateUIState(newState) {
+                // Update mic button
+                micBtn.classList.remove('listening', 'speaking', 'processing');
+                if (newState === 'listening') {
+                    micBtn.classList.add('listening');
+                    micIcon.innerHTML = '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-6 0z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line>';
+                } else if (newState === 'speaking') {
+                    micBtn.classList.add('speaking');
+                    micIcon.innerHTML = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>';
+                } else if (newState === 'thinking' || newState === 'transcribing') {
+                    micBtn.classList.add('processing');
+                    micIcon.innerHTML = '<circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path>';
+                } else {
+                    micIcon.innerHTML = '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-6 0z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line>';
+                }
+            }
+
+            // ─── Conversation ───
+            function addMessage(role, text) {
+                const div = document.createElement('div');
+                div.className = 'msg msg-' + role;
+                div.textContent = text;
+                conversation.appendChild(div);
+                conversation.scrollTop = conversation.scrollHeight;
+            }
+
+            function addSystemMessage(text) {
+                const div = document.createElement('div');
+                div.className = 'msg msg-system';
+                div.textContent = text;
+                conversation.appendChild(div);
+                conversation.scrollTop = conversation.scrollHeight;
+            }
+
+            // ─── Input Handling ───
+            function sendTextInput() {
+                const text = textInput.value.trim();
+                if (!text) return;
+
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'input', text: text }));
+                    addMessage('user', text);
+                    textInput.value = '';
+                } else {
+                    addSystemMessage('Not connected to core');
+                }
+            }
+
+            textInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendTextInput();
+                }
+            });
+
+            sendBtn.addEventListener('click', sendTextInput);
+
+            // ─── Mic Button (Push-to-talk) ───
+            micBtn.addEventListener('mousedown', startRecording);
+            micBtn.addEventListener('touchstart', function(e) { e.preventDefault(); startRecording(); });
+            document.addEventListener('mouseup', stopRecording);
+            document.addEventListener('touchend', stopRecording);
+            document.addEventListener('mouseleave', stopRecording);
+
+            async function startRecording() {
+                if (isRecording) return;
+                if (state === 'thinking' || state === 'speaking') return;
+
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    mediaRecorder.onstop = async () => {
+                        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+                        await sendAudioBlob(blob);
+                        stream.getTracks().forEach(t => t.stop());
+                    };
+
+                    mediaRecorder.start(100); // 100ms chunks
+                    isRecording = true;
+                    micBtn.classList.add('listening');
+                    updateUIState('listening');
+
+                    // Send state to core
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'state', value: 'listening' }));
+                    }
+                } catch (err) {
+                    console.error('Mic access denied:', err);
+                    addSystemMessage('Microphone access denied');
+                }
+            }
+
+            function stopRecording() {
+                if (!isRecording || !mediaRecorder) return;
+                isRecording = false;
+                mediaRecorder.stop();
+                micBtn.classList.remove('listening');
+            }
+
+            async function sendAudioBlob(blob) {
+                // Convert to base64 for transport
+                const reader = new FileReader();
+                reader.onloadend = function() {
+                    const base64 = reader.result.split(',')[1];
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'voice_input',
+                            audio: base64,
+                            format: 'webm'
+                        }));
+                    }
+                };
+                reader.readAsDataURL(blob);
+            }
+
+            // ─── WebSocket ───
+            function connect() {
+                if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+
+                try {
+                    ws = new WebSocket(wsUrl);
+
+                    ws.onopen = function() {
+                        console.log('[Overlay] Connected to NEXUS core');
+                        reconnectDelay = 1000;
+                        ws.send(JSON.stringify({ type: 'get_config' }));
+                    };
+
+                    ws.onmessage = function(event) {
+                        try {
+                            const data = JSON.parse(event.data);
+                            handleMessage(data);
+                        } catch (e) {
+                            console.warn('[Overlay] Invalid message:', e);
+                        }
+                    };
+
+                    ws.onclose = function() {
+                        console.log('[Overlay] Disconnected, reconnecting in', reconnectDelay, 'ms');
+                        addSystemMessage('Connection lost — reconnecting...');
+                        setTimeout(connect, reconnectDelay);
+                        reconnectDelay = Math.min(reconnectDelay * 2, maxReconnectDelay);
+                    };
+
+                    ws.onerror = function(err) {
+                        console.error('[Overlay] WebSocket error:', err);
+                    };
+                } catch (e) {
+                    console.error('[Overlay] Connection failed:', e);
+                    setTimeout(connect, reconnectDelay);
+                }
+            }
+
+            function handleMessage(data) {
+                const type = data.type;
+
+                if (type === 'state') {
+                    const now = Date.now();
+                    if (data.value !== state && now - lastStateChange > stateDebounceMs) {
+                        setState(data.value);
+                        lastStateChange = now;
+                    }
+                } else if (type === 'audio') {
+                    if (data.source === 'mic' || data.source === 'tts') {
+                        if (data.level > audioTarget) audioTarget = data.level;
+                        if (data.bins && data.bins.length > 0) {
+                            const len = Math.min(data.bins.length, CONFIG.barCount);
+                            for (let i = 0; i < len; i++) {
+                                const target = Math.max(0.05, data.bins[i] * 1.2);
+                                barValues[i] += (target - barValues[i]) * 0.3;
+                            }
+                        }
+                    }
+                } else if (type === 'config') {
+                    if (data.config) {
+                        if (data.config.states) STATES = data.config.states;
+                        if (data.config.barCount) {
+                            CONFIG.barCount = data.config.barCount;
+                            barValues = new Array(CONFIG.barCount).fill(0.1);
+                        }
+                        if (data.config.ringCount) CONFIG.ringCount = data.config.ringCount;
+                    }
+                } else if (type === 'response') {
+                    // Assistant response from core
+                    addMessage('assistant', data.text);
+                    // State will be updated via separate state message
+                } else if (type === 'error') {
+                    addMessage('error', data.message || 'An error occurred');
+                    setState('error');
+                } else if (type === 'pong') {
+                    // Heartbeat
+                }
+            }
+
+            function setState(key) {
+                if (!STATES[key]) return;
+                state = key;
+                updateUIState(key);
+                spawnBurst();
+            }
+
+            function spawnBurst() {
+                for (let i = 0; i < CONFIG.particleBurstCount; i++) {
+                    particles.push({
+                        angle: Math.random() * Math.PI * 2,
+                        radius: 60,
+                        speed: CONFIG.particleBaseSpeed + Math.random() * CONFIG.particleSpeedVariance,
+                        life: 1,
+                        decay: CONFIG.particleDecayMin + Math.random() * (CONFIG.particleDecayMax - CONFIG.particleDecayMin)
+                    });
+                }
+            }
+
+            // ─── Audio Visualization ───
+            function stepAudio() {
+                const cfg = STATES[state];
+
+                if (state === 'listening' || state === 'speaking') {
+                    audioTarget = Math.max(audioTarget, 0.15);
+                } else if (state === 'thinking') {
+                    audioTarget = 0.2 + Math.sin(Date.now() / 300) * 0.05;
+                } else if (state === 'error') {
+                    audioTarget = Math.random() * 0.6;
+                } else {
+                    audioTarget = 0.15 + Math.sin(Date.now() / 900) * 0.05;
+                }
+
+                audioLevel += (audioTarget - audioLevel) * 0.08;
+
+                for (let i = 0; i < CONFIG.barCount; i++) {
+                    let target;
+                    if (state === 'idle') {
+                        target = 0.08 + Math.sin(Date.now() / 700 + i) * 0.03;
+                    } else {
+                        target = Math.max(0.05, audioLevel * (0.4 + Math.random() * 0.9));
+                    }
+                    barValues[i] += (target - barValues[i]) * 0.25;
+                }
+            }
+
+            // ─── Render Loop ───
+            function resize() {
+                const rect = canvas.getBoundingClientRect();
+                const dpr = window.devicePixelRatio || 1;
+                canvas.width = rect.width * dpr;
+                canvas.height = rect.height * dpr;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            }
+
+            function draw() {
+                const rect = canvas.getBoundingClientRect();
+                const w = rect.width, h = rect.height;
+                const cx = w / 2, cy = h / 2;
+                const baseR = Math.min(w, h) * CONFIG.ringBaseRadiusRatio;
+                const cfg = STATES[state];
+
+                ctx.clearRect(0, 0, w, h);
+                stepAudio();
+
+                rotation += 0.006 * cfg.speed;
+                sweepAngle += CONFIG.sweepSpeedFactor * cfg.speed;
+
+                const breathe = state === 'idle'
+                    ? 1 + Math.sin(Date.now() / CONFIG.idleBreatheSpeed) * CONFIG.idleBreatheAmplitude
+                    : 1 + audioLevel * CONFIG.activeBreatheFactor;
+
+                // Central glow wash
+                ctx.save();
+                const wash = ctx.createRadialGradient(cx, cy, baseR * 0.3, cx, cy, baseR * 2.6);
+                wash.addColorStop(0, cfg.color + '22');
+                wash.addColorStop(1, cfg.color + '00');
+                ctx.fillStyle = wash;
+                ctx.fillRect(0, 0, w, h);
+                ctx.restore();
+
+                // Radar sweep wedge during thinking
+                if (state === 'thinking') {
+                    ctx.save();
+                    ctx.translate(cx, cy);
+                    ctx.rotate(sweepAngle);
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.arc(0, 0, baseR * 2.2, -0.5, 0);
+                    ctx.closePath();
+                    const grad = ctx.createLinearGradient(0, 0, baseR * 2.2, 0);
+                    grad.addColorStop(0, cfg.color + '55');
+                    grad.addColorStop(1, cfg.color + '00');
+                    ctx.fillStyle = grad;
+                    ctx.fill();
+                    ctx.restore();
+                }
+
+                // Concentric counter-rotating rings
+                for (let ri = 0; ri < CONFIG.ringCount; ri++) {
+                    const mult = CONFIG.ringMultipliers[ri % CONFIG.ringMultipliers.length];
+                    const lineWidth = CONFIG.ringLineWidths[ri % CONFIG.ringLineWidths.length];
+                    const dashPattern = CONFIG.ringDashPatterns[ri % CONFIG.ringDashPatterns.length];
+                    const rotSpeed = CONFIG.ringRotationSpeeds[ri % CONFIG.ringRotationSpeeds.length];
+                    const alpha = CONFIG.ringGlobalAlphas[ri % CONFIG.ringGlobalAlphas.length];
+
+                    ctx.save();
+                    ctx.translate(cx, cy);
+                    ctx.rotate(rotation * rotSpeed);
+                    ctx.beginPath();
+                    ctx.arc(0, 0, baseR * mult * breathe, 0, Math.PI * 2);
+                    ctx.setLineDash(dashPattern);
+                    ctx.lineWidth = lineWidth;
+                    ctx.strokeStyle = cfg.color;
+                    ctx.shadowColor = cfg.color;
+                    ctx.shadowBlur = CONFIG.ringShadowBlur;
+                    ctx.globalAlpha = alpha;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                // Radial frequency bars
+                ctx.save();
+                ctx.translate(cx, cy);
+                for (let i = 0; i < CONFIG.barCount; i++) {
+                    const a = (i / CONFIG.barCount) * Math.PI * 2;
+                    const len = CONFIG.barMinLength + barValues[i] * (CONFIG.barMaxLength - CONFIG.barMinLength);
+                    const r1 = baseR * CONFIG.barBaseRadiusRatio * breathe;
+                    const r2 = r1 + len;
+
+                    ctx.beginPath();
+                    ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+                    ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+                    ctx.strokeStyle = cfg.accent;
+                    ctx.shadowColor = cfg.color;
+                    ctx.shadowBlur = CONFIG.barShadowBlur;
+                    ctx.lineWidth = CONFIG.barLineWidth;
+                    ctx.globalAlpha = 0.55 + barValues[i] * 0.4;
+                    ctx.stroke();
+                }
+                ctx.restore();
+
+                // Core
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.beginPath();
+                ctx.arc(0, 0, baseR * CONFIG.coreRadiusRatio * breathe, 0, Math.PI * 2);
+                const coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, baseR * CONFIG.coreRadiusRatio);
+                coreGrad.addColorStop(0, cfg.accent);
+                coreGrad.addColorStop(1, cfg.color + '33');
+                ctx.fillStyle = coreGrad;
+                ctx.shadowColor = cfg.color;
+                ctx.shadowBlur = CONFIG.coreShadowBlur;
+                ctx.fill();
+                ctx.restore();
+
+                // Particles
+                particles.forEach(p => { p.radius += p.speed; p.life -= p.decay; });
+                particles = particles.filter(p => p.life > 0);
+
+                ctx.save();
+                ctx.translate(cx, cy);
+                particles.forEach(p => {
+                    const x = Math.cos(p.angle) * p.radius;
+                    const y = Math.sin(p.angle) * p.radius;
+                    ctx.beginPath();
+                    ctx.arc(x, y, CONFIG.particleSize, 0, Math.PI * 2);
+                    ctx.fillStyle = cfg.accent;
+                    ctx.shadowColor = cfg.color;
+                    ctx.shadowBlur = CONFIG.particleShadowBlur;
+                    ctx.globalAlpha = Math.max(0, p.life);
+                    ctx.fill();
+                });
+                ctx.restore();
+
+                // Error jitter
+                if (state === 'error' && Math.random() < CONFIG.errorJitterProbability) {
+                    ctx.save();
+                    ctx.globalAlpha = CONFIG.errorJitterAlpha;
+                    ctx.fillStyle = cfg.color;
+                    ctx.fillRect(0, cy + (Math.random() - 0.5) * baseR, w, 2);
+                    ctx.restore();
+                }
+
+                ctx.globalAlpha = 1;
+                requestAnimationFrame(draw);
+            }
+
+            // ─── Initialize ───
+            window.addEventListener('resize', resize);
+            resize();
+            connect();
+            draw();
+            updateUIState('idle');
+
+            // Heartbeat
+            setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'ping', ts: Date.now() }));
+                }
+            }, 10000);
+
+            // Focus input on load
+            setTimeout(() => textInput.focus(), 500);
+        })();
+    </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 """
 NEXUS AI v4.0 — Health check: validates all subsystems in < 5 seconds.
-Hardware: Intel i3 7th Gen · 12GB RAM · Ollama + Groq API
+Hardware: Intel i3 7th Gen · 12GB RAM · Groq API
 
 Provides comprehensive subsystem validation used by:
 - Boot sequence (main.py)
@@ -128,22 +128,19 @@ def run_health_check() -> HealthCheckResult:
     except ImportError:
         result.checks["memory"] = {"status": "unknown", "note": "psutil not available"}
     
-    # Check 6: Ollama connectivity
-    try:
-        import urllib.request
-        settings = get_settings()
-        req = urllib.request.Request(
-            f"{settings.OLLAMA_BASE_URL}/api/tags",
-            headers={"User-Agent": "NexusAI/4.0"},
-        )
-        with urllib.request.urlopen(req, timeout=3) as response:
-            ollama_ok = response.status == 200
-            result.checks["ollama"] = {
-                "status": "ok" if ollama_ok else "unreachable",
-                "url": settings.OLLAMA_BASE_URL,
-            }
-    except Exception:
-        result.checks["ollama"] = {"status": "unreachable"}
+    # Check 6: Groq API key presence
+    settings = get_settings()
+    groq_ok = bool(settings.GROQ_API_KEY)
+    result.checks["groq_api"] = {
+        "status": "ok" if groq_ok else "missing",
+        "models": {
+            "planner": settings.PLANNER_MODEL,
+            "automation": settings.AUTOMATION_MODEL,
+            "voice": settings.VOICE_MODEL,
+        },
+    }
+    if not groq_ok:
+        result.warnings.append("GROQ_API_KEY not set — LLM features will be unavailable")
     
     # Summary
     all_ok = all(
@@ -195,9 +192,8 @@ def print_health_report(result: HealthCheckResult) -> None:
             avail = check_result.get("available_mb", "?")
             total = check_result.get("total_mb", "?")
             print(f"     Available: {avail}MB / Total: {total}MB")
-        elif check_name == "ollama" and status == "unreachable":
-            url = check_result.get("url", "http://localhost:11434")
-            print(f"     Ollama not reachable at {url}")
+        elif check_name == "groq_api" and status == "missing":
+            print(f"     Set GROQ_API_KEY in ~/.nexus_ai/.env")
     
     if result.warnings:
         print(f"\n{BOLD}{YELLOW}Warnings ({len(result.warnings)}):{RESET}")

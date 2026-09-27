@@ -1,0 +1,19 @@
+2026-09-18 22:07:25 | nexus.boot                     | INFO     | NEXUS AI v4.0.0 boot sequence starting...
+2026-09-18 22:07:25 | nexus.boot                     | INFO     | Platform: win32 | Python: 3.12.0
+2026-09-18 22:07:25 | nexus.boot                     | INFO     | UI mode: headless
+2026-09-18 22:07:26 | nexus.boot                     | INFO     | Configuration loaded from C:\Users\lenovo\.nexus_ai\.env
+2026-09-18 22:07:26 | nexus.boot                     | INFO     | Runtime directories verified
+2026-09-18 22:07:28 | chromadb.auth.registry         | DEBUG    | Registering provider: token_config
+2026-09-18 22:07:28 | chromadb.auth.registry         | DEBUG    | Registering provider: user_token_config
+2026-09-18 22:07:28 | chromadb.auth.registry         | DEBUG    | Registering provider: token
+2026-09-18 22:07:28 | chromadb.auth.registry         | DEBUG    | Registering provider: token
+2026-09-18 22:07:29 | chromadb.telemetry.product.posthog | INFO     | Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+2026-09-18 22:07:29 | chromadb.config                | DEBUG    | Starting component System
+2026-09-18 22:07:29 | chromadb.config                | DEBUG    | Starting component Posthog
+2026-09-18 22:07:29 | chromadb.config                | DEBUG    | Starting component OpenTelemetryClient
+2026-09-18 22:07:29 | chromadb.config                | DEBUG    | Starting component SimpleAssignmentPolicy
+2026-09-18 22:07:29 | chromadb.config                | DEBUG    | Starting component SqliteDB
+2026-09-18 22:07:30 | chromadb.config                | DEBUG    | Starting component QuotaEnforcer
+2026-09-18 22:07:30 | chromadb.config                | DEBUG    | Starting component LocalSegmentManager
+2026-09-18 22:07:30 | chromadb.config                | DEBUG    | Starting component SegmentAPI
+2026-09-18 22:07:30 | urllib3.connectionpool         | DEBUG    | Starting new HTTPS connection (1): app.posthog.com:443

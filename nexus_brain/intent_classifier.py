@@ -1,12 +1,11 @@
 """
-NEXUS AI v4.0 — Local Ollama intent pre-classification.
-Hardware: Intel i3 7th Gen · 12GB RAM · Ollama + Groq API
+NEXUS AI v4.0 — Intent pre-classification via Groq voice model.
 
-Saves ~$0.0002 per request by classifying simple commands locally
-without needing a 70B cloud model. Routes ~80% of requests through
-local classification.
+Uses the lightweight Groq voice model (llama-3.1-8b-instant) for fast,
+cheap intent classification. Rule-based pre-filter handles ~30% of requests
+at zero cost.
 
-Classification prompt: 50 tokens in, 5 tokens out, cost ≈ $0.
+Classification prompt: ~50 tokens in, ~5 tokens out, cost ≈ $0.000001.
 """
 
 import asyncio
@@ -165,100 +164,95 @@ Respond with EXACTLY one JSON object — no markdown, no prose, no explanation:
 
 class IntentClassifier:
     """
-    Two-stage intent classifier: rule-based pre-filter → Ollama fallback.
-    
+    Two-stage intent classifier: rule-based pre-filter → Groq voice model.
+
+    Uses the lightweight Groq voice model (llama-3.1-8b-instant) for fast,
+    cheap intent classification when rules don't match.
+
     Usage:
         classifier = get_intent_classifier()
         result = await classifier.classify("Open VS Code")
         if result.needs_full_agent:
-            # Route to Groq 70B agent
+            # Route to planner agent
         else:
             # Route to local action
     """
-    
+
     def __init__(self):
         self._settings = get_settings()
-        self._ollama_url = self._settings.OLLAMA_BASE_URL
-        self._model = self._settings.OLLAMA_INTENT_MODEL
-        self._session = None  # httpx.AsyncClient (lazy)
-    
-    async def _get_session(self):
-        """Lazy-initialize httpx session."""
-        if self._session is None or self._session.is_closed:
-            import httpx
-            self._session = httpx.AsyncClient(timeout=10.0)
-        return self._session
-    
+        self._llm_router = None  # Lazy import to avoid circular deps
+
+    def _get_llm_router(self):
+        if self._llm_router is None:
+            from nexus_brain.llm_router import get_llm_router
+            self._llm_router = get_llm_router()
+        return self._llm_router
+
     async def classify(self, user_input: str) -> ClassificationResult:
         """
         Classify a user request into an intent category.
-        
+
         Two-stage pipeline:
         1. Rule-based pre-filter (zero cost, ~0.01ms)
-        2. If ambiguous → local Ollama call (~50ms on i3, ~22 tok/sec)
-        
+        2. If ambiguous → Groq voice model call (~100ms)
+
         Args:
             user_input: The raw user message.
-        
+
         Returns:
             ClassificationResult with intent, confidence, and routing hint.
         """
         start = time.perf_counter()
-        
+
         # Stage 1: Rule-based pre-filter
         rule_match = _rule_based_classify(user_input)
         if rule_match:
             latency = (time.perf_counter() - start) * 1000
             return ClassificationResult(
                 intent=rule_match,
-                confidence=0.85,  # High confidence for rule matches
+                confidence=0.85,
                 reasoning=f"Rule-based match: input starts with known pattern",
                 latency_ms=latency,
                 model_used="rule_based",
                 needs_full_agent=rule_match in ("complex_task", "capability_synthesis", "clarify"),
             )
-        
-        # Stage 2: Ollama classification
+
+        # Stage 2: Groq voice model classification
         try:
             prompt = CLASSIFICATION_PROMPT.format(user_input=user_input[:500])
-            
-            session = await self._get_session()
-            payload = {
-                "model": self._model,
-                "messages": [
+            router = self._get_llm_router()
+
+            response = await router.generate(
+                messages=[
                     {"role": "system", "content": "You are an intent classifier. Respond with ONLY the JSON object."},
                     {"role": "user", "content": prompt},
                 ],
-                "temperature": 0.0,  # Deterministic for classification
-                "max_tokens": 100,
-                "stream": False,
-            }
-            
-            response = await session.post(
-                f"{self._ollama_url}/api/chat",
-                json=payload,
+                temperature=0.0,
+                max_tokens=100,
+                role="voice",
             )
-            response.raise_for_status()
-            data = response.json()
-            content = data.get("message", {}).get("content", "").strip()
-            
+
+            if not response.success:
+                raise RuntimeError(response.error or "Groq classification failed")
+
+            content = response.content.strip()
+
             # Parse JSON response
             result = self._parse_response(content)
             latency = (time.perf_counter() - start) * 1000
-            
+
             return ClassificationResult(
                 intent=result.get("intent", "clarify"),
                 confidence=result.get("confidence", 0.5),
-                reasoning=result.get("reasoning", "Local model classification"),
+                reasoning=result.get("reasoning", "Groq voice model classification"),
                 latency_ms=latency,
-                model_used=self._model,
+                model_used=response.model,
                 needs_full_agent=result.get("intent") in ("complex_task", "capability_synthesis", "clarify"),
             )
-            
+
         except Exception as e:
             latency = (time.perf_counter() - start) * 1000
             logger.warning("Intent classification failed: %s. Defaulting to complex_task.", e)
-            # On error, default to the most capable route (safe fallback)
             return ClassificationResult(
                 intent="complex_task",
                 confidence=0.3,
@@ -365,10 +359,7 @@ class IntentClassifier:
         return result
     
     async def close(self) -> None:
-        """Close the HTTP session."""
-        if self._session and not self._session.is_closed:
-            await self._session.aclose()
-            self._session = None
+        """No-op — Groq client is managed by LLMRouter."""
 
 
 @lru_cache(maxsize=1)

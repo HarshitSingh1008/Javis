@@ -16,6 +16,7 @@ from nexus_audio.audio_processor import (
     calculate_rms, is_silence, detect_speech_segments,
     normalize_audio, trim_silence,
 )
+from nexus_audio.capture import get_audio_capture, AudioCapture, AudioConfig
 
 __all__ = [
     "get_tts_engine", "TTSEngine", "VoiceProfile",
@@ -24,4 +25,5 @@ __all__ = [
     "test_audio_output", "test_microphone", "suppress_alsa_errors", "get_system_volume",
     "calculate_rms", "is_silence", "detect_speech_segments",
     "normalize_audio", "trim_silence",
+    "get_audio_capture", "AudioCapture", "AudioConfig",
 ]

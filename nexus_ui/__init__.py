@@ -7,7 +7,7 @@ notification manager, onboarding wizard, and DAG visualizer.
 """
 
 from nexus_ui.theme_engine import ThemeEngine, get_theme_engine, ThemeColors
-from nexus_ui.animation_engine import AnimationEngine, Particle, ArcReactor, Waveform
+from nexus_ui.animation_engine import AnimationEngine, Particle, ArcReactorRing, ArcReactorCore, WaveformBand
 from nexus_ui.notification_manager import NotificationManager, get_notification_manager
 from nexus_ui.custom_hud import NexusHUD, run_hud
 from nexus_ui.onboarding import OnboardingWizard
@@ -19,8 +19,9 @@ __all__ = [
     "ThemeColors",
     "AnimationEngine",
     "Particle",
-    "ArcReactor",
-    "Waveform",
+    "ArcReactorRing",
+    "ArcReactorCore",
+    "WaveformBand",
     "NotificationManager",
     "get_notification_manager",
     "NexusHUD",

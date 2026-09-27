@@ -1,0 +1,3 @@
+<frozen runpy>:128: RuntimeWarning: 'nexus_overlay.overlay_process' found in sys.modules after import of package 'nexus_overlay', but prior to execution of 'nexus_overlay.overlay_process'; this may result in unpredictable behaviour
+22:38:17 | nexus.overlay.config           | INFO     | Loaded overlay config from C:\Users\lenovo\.nexus_ai\overlay_config.json
+22:38:17 | nexus.overlay.process          | INFO     | Starting overlay window at (1660, 780)

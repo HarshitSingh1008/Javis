@@ -80,9 +80,13 @@ class TestOrchestratorInit:
         orch = get_orchestrator()
         oq = asyncio.Queue()
         pq = asyncio.Queue()
-        orch.set_queues(oq, pq)
-        assert orch._output_queue is oq
-        assert orch._progress_queue is pq
+        previous_queues = (orch._output_queue, orch._progress_queue)
+        try:
+            orch.set_queues(oq, pq)
+            assert orch._output_queue is oq
+            assert orch._progress_queue is pq
+        finally:
+            orch.set_queues(*previous_queues)
 
 
 class TestOrchestratorRun:

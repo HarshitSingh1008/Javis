@@ -25,17 +25,51 @@ import sys
 import threading
 import time
 import traceback
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Callable, Awaitable, Set, Tuple
 from functools import lru_cache
+from contextlib import asynccontextmanager
 
 from nexus_config.settings import get_settings, APP_ROOT
 from nexus_config.audit_logger import get_audit_logger, audited
-from nexus_billing.tier_gate import requires_tier, check_tier_access, TIER_RANK
-from nexus_billing.license_manager import get_license_manager
+from nexus_brain.service_lifecycle import ServiceBase
 
 logger = logging.getLogger("nexus.registry")
+
+
+# ─── Tool Execution Context ────────────────────────────────────────────────────
+
+@dataclass
+class ToolExecutionContext:
+    """
+    Context for a tool execution with progress tracking.
+    
+    Allows tools to report progress during long-running operations.
+    """
+    execution_id: str
+    tool_name: str
+    input_data: Dict[str, Any]
+    start_time: float
+    progress_callback: Optional[Callable[[float, str], Awaitable[None]]] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    async def report_progress(self, progress: float, message: str = "") -> None:
+        """Report progress (0.0 to 1.0)."""
+        if self.progress_callback:
+            await self.progress_callback(min(1.0, max(0.0, progress)), message)
+
+
+@dataclass
+class ToolExecutionResult:
+    """Result of a tool execution."""
+    success: bool
+    result: Any = None
+    error: Optional[str] = None
+    duration_ms: float = 0.0
+    execution_id: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 # ─── Plugin Metadata ──────────────────────────────────────────────────────────
@@ -73,25 +107,27 @@ class PluginMetadata:
 
 # ─── Tool Registry ────────────────────────────────────────────────────────────
 
-class ToolRegistry:
+class ToolRegistry(ServiceBase):
     """
     Central tool registry for NEXUS AI.
     
     All 22 built-in tools, plugins, and synthesized tools register here.
     The registry provides:
       - Tool lookup by name
-      - Tool execution with error handling
+      - Tool execution with error handling and progress tracking
       - Tool listing formatted for LLM system prompt
       - Plugin hot-reload via watchdog
     
     Usage:
         registry = get_tool_registry()
-        registry.register(my_tool_func, source="plugin")
-        result = await registry.execute("file_manager", {"path": "/tmp"})
-        tools_list = registry.format_for_prompt()
+        async with registry.lifespan():
+            registry.register(my_tool_func, source="plugin")
+            result = await registry.execute("file_manager", {"path": "/tmp"})
+            tools_list = registry.format_for_prompt()
     """
     
     def __init__(self):
+        super().__init__("tool_registry")
         self._settings = get_settings()
         self._audit_logger = get_audit_logger()
         
@@ -113,6 +149,11 @@ class ToolRegistry:
         
         # Lazy import state for tools/tool modules
         self._tool_modules: Dict[str, Any] = {}
+        
+        # Execution tracking
+        self._active_executions: Dict[str, ToolExecutionContext] = {}
+        self._execution_history: List[ToolExecutionResult] = []
+        self._max_history = 100
     
     # ── Tool Registration ─────────────────────────────────────────────────
     
@@ -612,7 +653,7 @@ class ToolRegistry:
     
     def load_builtin_tools(self) -> int:
         """
-        Load all 22 built-in tools from nexus_tools.tools package.
+        Load all built-in tools from nexus_tools.tools package.
         
         Each tool module should define a tool function decorated with @tool.
         The function name should match the module's purpose.
@@ -625,6 +666,8 @@ class ToolRegistry:
         tools_dir = Path(tools_package.__file__).parent
         
         count = 0
+        validation_errors = []
+        
         for file_path in sorted(tools_dir.glob("t*.py")):
             if file_path.stem == "__init__":
                 continue
@@ -641,18 +684,60 @@ class ToolRegistry:
                 # Find @tool-decorated functions
                 tools_found = 0
                 for attr_name in dir(module):
+                    # Skip the @tool decorator itself — it's the registration mechanism, not a tool
+                    if attr_name == "tool":
+                        continue
+                    
                     attr = getattr(module, attr_name)
-                    # LangChain @tool decorator creates a BaseTool instance
-                    if hasattr(attr, "__name__") and callable(attr) and not attr_name.startswith("_"):
-                        # Check if it's a regular function (not a class)
-                        if inspect.isfunction(attr) or hasattr(attr, "invoke"):
-                            # Use attr_name as the canonical tool name (most reliable)
-                            self.register(attr, source="builtin", metadata=PluginMetadata(
-                                name=attr_name,  # Force use of module-level variable name
-                                description=getattr(attr, "__doc__", "").split("\n")[0][:200] if getattr(attr, "__doc__") else "No description",
-                                source="builtin"
-                            ))
-                            tools_found += 1
+                    
+                    # Skip typing imports (List, Dict, Optional, etc.) and pathlib Path
+                    if attr_name in ("Any", "Dict", "List", "Optional", "Path", "Callable", "Awaitable", "Tuple", "Set", "Literal"):
+                        continue
+                    
+                    # A tool must be callable and have either __name__ (function) or name (StructuredTool)
+                    has_name = hasattr(attr, "__name__") or hasattr(attr, "name")
+                    if not has_name or not callable(attr) or attr_name.startswith("_"):
+                        continue
+                    
+                    # Check if it's a function, a LangChain StructuredTool, or has invoke
+                    is_valid_tool = inspect.isfunction(attr) or hasattr(attr, "invoke")
+                    if not is_valid_tool:
+                        continue
+                    
+                    # Extract description from the right source
+                    # StructuredTool: .description property (from @tool decorator)
+                    if hasattr(attr, "description") and attr.description:
+                        raw = attr.description
+                        # StructuredTool.description includes the signature like:
+                        # "func_name(arg1: type) -> ret - Actual description"
+                        # Strip the signature part, keep only the description after " - "
+                        if " - " in raw:
+                            raw = raw.split(" - ", 1)[1]
+                    # Plain function: .__doc__
+                    elif hasattr(attr, "__doc__") and attr.__doc__:
+                        raw = attr.__doc__
+                    else:
+                        raw = ""
+                    
+                    # Strip whitespace, take first non-empty line
+                    desc_lines = raw.strip().split("\n") if raw.strip() else []
+                    desc = (desc_lines[0].strip()[:200] if desc_lines else f"No description available")
+                    
+                    # Validate description
+                    if desc == "No description available":
+                        validation_errors.append(f"{attr_name}: empty description")
+                    
+                    if len(desc) > 200:
+                        validation_errors.append(f"{attr_name}: description too long ({len(desc)} chars)")
+                    
+                    logger.debug("Tool '%s' description: '%s' (type=%s)", attr_name, desc, type(attr).__name__)
+                    
+                    self.register(attr, source="builtin", metadata=PluginMetadata(
+                        name=attr_name,  # Force use of module-level variable name
+                        description=desc,
+                        source="builtin"
+                    ))
+                    tools_found += 1
                 
                 if tools_found == 0:
                     logger.debug("No tools found in %s (stub file)", file_path.stem)
@@ -661,8 +746,83 @@ class ToolRegistry:
             
             except Exception as e:
                 logger.warning("Failed to load tools from '%s': %s", file_path.stem, e)
+        
+        # Run validation for tools that have validate_tool_schema function
+        self._validate_tool_schemas(validation_errors)
+        
         logger.info("Loaded %d built-in tools", count)
         return count
+    
+    def _validate_tool_schemas(self, validation_errors: List[str]) -> None:
+        """Validate tool schemas and descriptions at startup."""
+        for name in sorted(self._tools.keys()):
+            func = self._tools[name]
+            meta = self._metadata.get(name)
+            
+            # Check description
+            if meta:
+                desc = meta.description
+            else:
+                doc = (func.__doc__ or "").strip()
+                desc = doc.split("\n")[0][:200]
+            
+            if not desc or desc == "No description available":
+                validation_errors.append(f"{name}: empty description")
+            
+            if len(desc) > 200:
+                validation_errors.append(f"{name}: description too long ({len(desc)} chars)")
+            
+            # Check for validate_tool_schema function in module
+            module_name = getattr(func, "__module__", "")
+            if module_name:
+                try:
+                    module = sys.modules.get(module_name)
+                    if module and hasattr(module, "validate_tool_schema"):
+                        ok, msg = module.validate_tool_schema()
+                        if not ok:
+                            validation_errors.append(msg)
+                except Exception:
+                    pass
+        
+        if validation_errors:
+            error_msg = "Tool validation failed:\n" + "\n".join(f"  - {e}" for e in validation_errors)
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+        else:
+            logger.info("All tool schemas validated successfully")
+    
+    # ── Service Lifecycle ───────────────────────────────────────────────────
+    
+    async def _start(self) -> None:
+        """Start tool registry - load built-in tools and start watchdog."""
+        logger.info("Starting tool registry...")
+        self.load_builtin_tools()
+        
+        if self._settings.PLUGIN_HOT_RELOAD:
+            self.start_watchdog()
+        
+        logger.info("Tool registry ready with %d tools", self.tool_count())
+    
+    async def _stop(self) -> None:
+        """Stop tool registry - stop watchdog."""
+        logger.info("Stopping tool registry...")
+        self.stop_watchdog()
+        logger.info("Tool registry stopped")
+    
+    async def _health_check(self) -> tuple[bool, str, Dict[str, Any]]:
+        """Check registry health."""
+        tool_count = self.tool_count()
+        if tool_count == 0:
+            return False, "No tools registered", {"tool_count": 0}
+        
+        return True, "Registry healthy", {
+            "tool_count": tool_count,
+            "builtin_count": len(self.list_tools("builtin")),
+            "plugin_count": len(self.list_tools("plugin")),
+            "synthesized_count": len(self.list_tools("synthesized")),
+            "watchdog_running": self._watchdog_running,
+            "active_executions": len(self._active_executions),
+        }
 
 
 @lru_cache(maxsize=1)
