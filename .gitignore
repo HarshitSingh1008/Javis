@@ -8,3 +8,5 @@ __pycache__/
 .vscode/settings.json
 ~/.nexus_ai/
 venv/
+*API KEY*
+*.key

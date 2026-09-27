@@ -1,0 +1,355 @@
+(venv) PS E:\Jarvis 2.0\venv> python main.py
+>> 2026-07-06 22:04:24 | nexus.boot                     | INFO     | NEXUS AI v4.0.0 boot sequence starting...
+>> 2026-07-06 22:04:24 | nexus.boot                     | INFO     | Platform: win32 | Python: 3.12.0
+>> 2026-07-06 22:04:26 | nexus.boot                     | INFO     | Configuration loaded from C:\Users\lenovo\.nexus_ai\.env
+>> 2026-07-06 22:04:26 | nexus.boot                     | INFO     | Runtime directories verified
+>> 2026-07-06 22:04:30 | chromadb.telemetry.product.posthog | INFO     | Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+>> 2026-07-06 22:04:31 | chromadb.telemetry.product.posthog | ERROR    | Failed to send telemetry event ClientStartEvent: capture() takes 1 positional argument but 3 were given
+>> pygame 2.6.1 (SDL 2.28.4, Python 3.12.0)
+>> Hello from the pygame community. https://www.pygame.org/contribute.html
+>> 2026-07-06 22:04:41 | nexus.boot                     | WARNING  | Health check found issues (3 warnings, 1 errors)
+>> 2026-07-06 22:04:41 | nexus.boot                     | INFO     | Degraded subsystems: cloud_llm, wake_word, ollama
+>> 2026-07-06 22:04:42 | nexus.boot                     | INFO     | First run detected — showing onboarding wizard
+>> 2026-07-06 22:04:46 | nexus.boot                     | INFO     | Initializing billing and licensing subsystem...
+>> 2026-07-06 22:04:47 | nexus.boot                     | INFO     | License loaded — current tier: free
+>> 2026-07-06 22:04:47 | nexus.boot                     | INFO     | Initializing tool registry...
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'web_fetch' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'python_interpreter' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'document_builder' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'pdf_reader' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'window_manager' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'clipboard_manager' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'local_vector_db' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'system_monitor' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'code_editor_control' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'email_client' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'workflow_macro' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'image_processor' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'data_analyzer' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'process_manager' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'notification_sender' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'calendar_manager' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'git_operations' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Loaded 22 built-in tools
+>> 2026-07-06 22:04:48 | nexus.boot                     | INFO     | Tool registry initialized with 22 tools
+>> 2026-07-06 22:04:48 | nexus.boot                     | INFO     | Initializing memory subsystem...
+>> 2026-07-06 22:04:48 | nexus.boot                     | WARNING  | Memory subsystem initialized with in-memory fallback: 'VectorStore' object has no attribute 'heartbeat'
+>> 2026-07-06 22:04:48 | nexus.boot                     | INFO     | Initializing audio subsystem...
+>> 2026-07-06 22:04:48 | nexus.boot                     | INFO     | Audio subsystem ready (on-demand initialization)
+>> 2026-07-06 22:04:48 | nexus.boot                     | INFO     | Initializing agent orchestrator...
+>> 2026-07-06 22:04:49 | nexus.boot                     | INFO     | Agent orchestrator ready
+>> 
+>> ╔══════════════════════════════════════════════════════════╗
+>> ║  NEXUS AI v4.0 — Autonomous Desktop Omni-Agent         ║
+>> ║  Hardware: i3 7th Gen · 12GB RAM · Ollama + Groq API   ║
+>> ╚══════════════════════════════════════════════════════════╝
+>> 
+>>   (3 warnings — run 'nexus health' for details)
+>> 2026-07-06 22:04:49 | nexus.boot                     | INFO     | Starting UI (GUI mode)...
+>> invalid command name "1666053502144update"
+>>     while executing
+>> "1666053502144update"
+>>     ("after" script)
+>> invalid command name "1666053500544check_dpi_scaling"
+>>     while executing
+>> "1666053500544check_dpi_scaling"
+>>     ("after" script)
+>> invalid command name "1666042015296_click_animation"
+>>     while executing
+>> "1666042015296_click_animation"
+>>     ("after" script)
+>> 2026-07-06 22:05:02 | nexus.boot                     | INFO     | User input received (24 chars)
+>> 2026-07-06 22:05:02 | nexus.orchestrator             | INFO     | Intent: simple_command (conf=0.85, full_agent=False, 0ms)
+>> 2026-07-06 22:05:02 | nexus.playbook_engine          | INFO     | Loaded playbook 'compliant_outreach_campaign' v1.0.0
+>> 2026-07-06 22:05:02 | nexus.playbook_engine          | INFO     | Loaded playbook 'local_business_site' v1.0.0
+>> 2026-07-06 22:05:02 | nexus.playbook_engine          | INFO     | Loaded 2 playbooks from C:\Users\lenovo\.nexus_ai\playbooks
+>> 2026-07-06 22:05:02 | nexus.playbook_engine          | INFO     | No playbook match for goal: open youtube on opera gx
+>> 2026-07-06 22:05:05 | nexus.llm_router               | WARNING  | ollama failed: All connection attempts failed
+>> 2026-07-06 22:05:05 | chromadb.telemetry.product.posthog | INFO     | Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+>> 2026-07-06 22:05:05 | chromadb.telemetry.product.posthog | ERROR    | Failed to send telemetry event ClientStartEvent: capture() takes 1 positional argument but 3 were given
+>> 2026-07-06 22:05:06 | chromadb.telemetry.product.posthog | ERROR    | Failed to send telemetry event ClientCreateCollectionEvent: capture() takes 1 positional argument but 3 were given
+>> E:\Jarvis 2.0\venv\venv\Lib\site-packages\pygame\pkgdata.py:25: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+>>   from pkg_resources import resource_stream, resource_exists
+>> 2026-07-06 22:05:49 | sentence_transformers.SentenceTransformer | INFO     | Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+>> modules.json: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 349/349 [00:00<?, ?B/s]
+>> config_sentence_transformers.json: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 116/116 [00:00<?, ?B/s]
+>> README.md: 10.5kB [00:00, ?B/s]
+>> sentence_bert_config.json: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 53.0/53.0 [00:00<?, ?B/s]
+>> config.json: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 612/612 [00:00<?, ?B/s]
+>> Xet Storage is enabled for this repo, but the 'hf_xet' package is not installed. Falling back to regular HTTP download. For better performance, install the package with: `pip install huggingface_hub[hf_xet]` or `pip install hf_xet`
+>> 2026-07-06 22:05:53 | huggingface_hub.file_download  | WARNING  | Xet Storage is enabled for this repo, but the 'hf_xet' package is not installed. Falling back to regular HTTP download. For better performance, install the package with: `pip install huggingface_hub[hf_xet]` or `pip install hf_xet`
+>> model.safetensors: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 90.9M/90.9M [00:03<00:00, 25.2MB/s]
+>> tokenizer_config.json: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 350/350 [00:00<?, ?B/s]
+>> vocab.txt: 232kB [00:00, 5.93MB/s]
+>> tokenizer.json: 466kB [00:00, 13.4MB/s]
+>> special_tokens_map.json: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 112/112 [00:00<00:00, 111kB/s]
+>> config.json: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 190/190 [00:00<?, ?B/s]2026-07-06 22:06:04 | sentence_transformers.SentenceTransformer | INFO     | Use pytorch device_name: cpu
+>> 
+>> Batches: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:00<00:00,  1.14it/s]2026-07-06 22:06:05 | chromadb.telemetry.product.posthog | ERROR    | Failed to send telemetry event CollectionAddEvent: capture() takes 1 positional argument but 3 were given
+>> 
+>> 2026-07-06 22:15:25 | nexus.boot                     | INFO     | Session context saved
+>> 2026-07-06 22:15:25 | nexus.boot                     | INFO     | Metrics flushed
+>> 2026-07-06 22:15:25 | nexus.boot                     | INFO     | NEXUS AI shutdown complete.
+>> (venv) PS E:\Jarvis 2.0\venv> 
+>> (venv) PS E:\Jarvis 2.0\venv> python main.py
+>> 2026-07-06 22:15:37 | nexus.boot                     | INFO     | NEXUS AI v4.0.0 boot sequence starting...
+>> 2026-07-06 22:15:37 | nexus.boot                     | INFO     | Platform: win32 | Python: 3.12.0
+>> 2026-07-06 22:15:38 | nexus.boot                     | INFO     | Configuration loaded from C:\Users\lenovo\.nexus_ai\.env
+>> 2026-07-06 22:15:38 | nexus.boot                     | INFO     | Runtime directories verified
+>> 2026-07-06 22:15:40 | chromadb.telemetry.product.posthog | INFO     | Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+>> 2026-07-06 22:15:40 | chromadb.telemetry.product.posthog | ERROR    | Failed to send telemetry event ClientStartEvent: capture() takes 1 positional argument but 3 were given
+>> pygame 2.6.1 (SDL 2.28.4, Python 3.12.0)
+>> Hello from the pygame community. https://www.pygame.org/contribute.html
+>> 2026-07-06 22:15:50 | nexus.boot                     | WARNING  | Health check found issues (3 warnings, 1 errors)
+>> 2026-07-06 22:15:50 | nexus.boot                     | INFO     | Degraded subsystems: cloud_llm, wake_word, ollama
+>> 2026-07-06 22:15:51 | nexus.boot                     | INFO     | First run detected — showing onboarding wizard
+>> 2026-07-06 22:15:55 | nexus.boot                     | INFO     | Initializing billing and licensing subsystem...
+>> 2026-07-06 22:15:55 | nexus.boot                     | INFO     | License loaded — current tier: free
+>> 2026-07-06 22:15:55 | nexus.boot                     | INFO     | Initializing tool registry...
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'web_fetch' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'python_interpreter' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'document_builder' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'pdf_reader' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'window_manager' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'clipboard_manager' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'local_vector_db' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'system_monitor' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'code_editor_control' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'email_client' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'workflow_macro' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'image_processor' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'data_analyzer' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'process_manager' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'notification_sender' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'calendar_manager' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'git_operations' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Loaded 22 built-in tools
+>> 2026-07-06 22:15:56 | nexus.boot                     | INFO     | Tool registry initialized with 22 tools
+>> 2026-07-06 22:15:56 | nexus.boot                     | INFO     | Initializing memory subsystem...
+>> 2026-07-06 22:15:56 | nexus.boot                     | WARNING  | Memory subsystem initialized with in-memory fallback: 'VectorStore' object has no attribute 'heartbeat'
+>> 2026-07-06 22:15:56 | nexus.boot                     | INFO     | Initializing audio subsystem...
+>> 2026-07-06 22:15:56 | nexus.boot                     | INFO     | Audio subsystem ready (on-demand initialization)
+>> 2026-07-06 22:15:56 | nexus.boot                     | INFO     | Initializing agent orchestrator...
+>> 2026-07-06 22:15:56 | nexus.boot                     | INFO     | Agent orchestrator ready
+>> 
+>> ╔══════════════════════════════════════════════════════════╗
+>> ║  NEXUS AI v4.0 — Autonomous Desktop Omni-Agent         ║
+>> ║  Hardware: i3 7th Gen · 12GB RAM · Ollama + Groq API   ║
+>> ╚══════════════════════════════════════════════════════════╝
+>> 
+>>   (3 warnings — run 'nexus health' for details)
+>> 2026-07-06 22:15:56 | nexus.boot                     | INFO     | Starting UI (GUI mode)...
+>> invalid command name "2563412505088update"
+>>     while executing
+>> "2563412505088update"
+>>     ("after" script)
+>> invalid command name "2563423930752check_dpi_scaling"
+>>     while executing
+>> "2563423930752check_dpi_scaling"
+>>     ("after" script)
+>> invalid command name "2563381466816_click_animation"
+>>     while executing
+>> "2563381466816_click_animation"
+>>     ("after" script)
+>> E:\Jarvis 2.0\venv\venv\Lib\site-packages\pygame\pkgdata.py:25: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+>>   from pkg_resources import resource_stream, resource_exists
+>> 2026-07-06 22:17:32 | nexus.boot                     | INFO     | User input received (24 chars)
+>> 2026-07-06 22:17:32 | nexus.orchestrator             | INFO     | Intent: simple_command (conf=0.85, full_agent=False, 0ms)
+>> 2026-07-06 22:17:32 | nexus.playbook_engine          | INFO     | Loaded playbook 'compliant_outreach_campaign' v1.0.0
+>> 2026-07-06 22:17:32 | nexus.playbook_engine          | INFO     | Loaded playbook 'local_business_site' v1.0.0
+>> 2026-07-06 22:17:32 | nexus.playbook_engine          | INFO     | Loaded 2 playbooks from C:\Users\lenovo\.nexus_ai\playbooks
+>> 2026-07-06 22:17:32 | nexus.playbook_engine          | INFO     | No playbook match for goal: open youtube on opera gx
+>> 2026-07-06 22:17:35 | nexus.llm_router               | WARNING  | ollama failed: All connection attempts failed
+>> 2026-07-06 22:17:35 | chromadb.telemetry.product.posthog | INFO     | Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+>> 2026-07-06 22:17:35 | chromadb.telemetry.product.posthog | ERROR    | Failed to send telemetry event ClientStartEvent: capture() takes 1 positional argument but 3 were given
+>> 2026-07-06 22:17:51 | sentence_transformers.SentenceTransformer | INFO     | Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+>> 2026-07-06 22:17:55 | sentence_transformers.SentenceTransformer | INFO     | Use pytorch device_name: cpu
+>> Batches: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:00<00:00, 17.82it/s]2026-07-06 22:17:55 | chromadb.telemetry.product.posthog | ERROR    | Failed to send telemetry event CollectionAddEvent: capture() takes 1 positional argument but 3 were given
+>> 
+(venv) PS E:\Jarvis 2.0\venv> (venv) PS E:\Jarvis 2.0\venv> python main.py
+>> 2026-07-06 22:04:24 | nexus.boot                     | INFO     | NEXUS AI v4.0.0 boot sequence starting...
+>> 2026-07-06 22:04:24 | nexus.boot                     | INFO     | Platform: win32 | Python: 3.12.0
+>> 2026-07-06 22:04:26 | nexus.boot                     | INFO     | Configuration loaded from C:\Users\lenovo\.nexus_ai\.env
+>> 2026-07-06 22:04:26 | nexus.boot                     | INFO     | Runtime directories verified
+>> 2026-07-06 22:04:30 | chromadb.telemetry.product.posthog | INFO     | Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+>> 2026-07-06 22:04:31 | chromadb.telemetry.product.posthog | ERROR    | Failed to send telemetry event ClientStartEvent: capture() takes 1 positional argument but 3 were given
+>> pygame 2.6.1 (SDL 2.28.4, Python 3.12.0)
+>> Hello from the pygame community. https://www.pygame.org/contribute.html
+>> 2026-07-06 22:04:41 | nexus.boot                     | WARNING  | Health check found issues (3 warnings, 1 errors)
+>> 2026-07-06 22:04:41 | nexus.boot                     | INFO     | Degraded subsystems: cloud_llm, wake_word, ollama
+>> 2026-07-06 22:04:42 | nexus.boot                     | INFO     | First run detected — showing onboarding wizard
+>> 2026-07-06 22:04:46 | nexus.boot                     | INFO     | Initializing billing and licensing subsystem...
+>> 2026-07-06 22:04:47 | nexus.boot                     | INFO     | License loaded — current tier: free
+>> 2026-07-06 22:04:47 | nexus.boot                     | INFO     | Initializing tool registry...
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'web_fetch' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'python_interpreter' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'document_builder' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'pdf_reader' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'window_manager' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'clipboard_manager' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'local_vector_db' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'system_monitor' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'code_editor_control' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'email_client' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'workflow_macro' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'image_processor' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'data_analyzer' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'process_manager' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'notification_sender' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'calendar_manager' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Registered tool 'git_operations' (source=builtin)
+>> 2026-07-06 22:04:48 | nexus.registry                 | INFO     | Loaded 22 built-in tools
+>> 2026-07-06 22:04:48 | nexus.boot                     | INFO     | Tool registry initialized with 22 tools
+>> 2026-07-06 22:04:48 | nexus.boot                     | INFO     | Initializing memory subsystem...
+>> 2026-07-06 22:04:48 | nexus.boot                     | WARNING  | Memory subsystem initialized with in-memory fallback: 'VectorStore' object has no attribute 'heartbeat'
+>> 2026-07-06 22:04:48 | nexus.boot                     | INFO     | Initializing audio subsystem...
+>> 2026-07-06 22:04:48 | nexus.boot                     | INFO     | Audio subsystem ready (on-demand initialization)
+>> 2026-07-06 22:04:48 | nexus.boot                     | INFO     | Initializing agent orchestrator...
+>> 2026-07-06 22:04:49 | nexus.boot                     | INFO     | Agent orchestrator ready
+>> 
+>> ╔══════════════════════════════════════════════════════════╗
+>> ║  NEXUS AI v4.0 — Autonomous Desktop Omni-Agent         ║
+>> ║  Hardware: i3 7th Gen · 12GB RAM · Ollama + Groq API   ║
+>> ╚══════════════════════════════════════════════════════════╝
+>> 
+>>   (3 warnings — run 'nexus health' for details)
+>> 2026-07-06 22:04:49 | nexus.boot                     | INFO     | Starting UI (GUI mode)...
+>> invalid command name "1666053502144update"
+>>     while executing
+>> "1666053502144update"
+>>     ("after" script)
+>> invalid command name "1666053500544check_dpi_scaling"
+>>     while executing
+>> "1666053500544check_dpi_scaling"
+>>     ("after" script)
+>> invalid command name "1666042015296_click_animation"
+>>     while executing
+>> "1666042015296_click_animation"
+>>     ("after" script)
+>> 2026-07-06 22:05:02 | nexus.boot                     | INFO     | User input received (24 chars)
+>> 2026-07-06 22:05:02 | nexus.orchestrator             | INFO     | Intent: simple_command (conf=0.85, full_agent=False, 0ms)
+>> 2026-07-06 22:05:02 | nexus.playbook_engine          | INFO     | Loaded playbook 'compliant_outreach_campaign' v1.0.0
+>> 2026-07-06 22:05:02 | nexus.playbook_engine          | INFO     | Loaded playbook 'local_business_site' v1.0.0
+>> 2026-07-06 22:05:02 | nexus.playbook_engine          | INFO     | Loaded 2 playbooks from C:\Users\lenovo\.nexus_ai\playbooks
+>> 2026-07-06 22:05:02 | nexus.playbook_engine          | INFO     | No playbook match for goal: open youtube on opera gx
+>> 2026-07-06 22:05:05 | nexus.llm_router               | WARNING  | ollama failed: All connection attempts failed
+>> 2026-07-06 22:05:05 | chromadb.telemetry.product.posthog | INFO     | Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+>> 2026-07-06 22:05:05 | chromadb.telemetry.product.posthog | ERROR    | Failed to send telemetry event ClientStartEvent: capture() takes 1 positional argument but 3 were given
+>> 2026-07-06 22:05:06 | chromadb.telemetry.product.posthog | ERROR    | Failed to send telemetry event ClientCreateCollectionEvent: capture() takes 1 positional argument but 3 were given
+>> E:\Jarvis 2.0\venv\venv\Lib\site-packages\pygame\pkgdata.py:25: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+>>   from pkg_resources import resource_stream, resource_exists
+>> 2026-07-06 22:05:49 | sentence_transformers.SentenceTransformer | INFO     | Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+>> modules.json: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 349/349 [00:00<?, ?B/s]
+>> config_sentence_transformers.json: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 116/116 [00:00<?, ?B/s]
+>> README.md: 10.5kB [00:00, ?B/s]
+>> sentence_bert_config.json: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 53.0/53.0 [00:00<?, ?B/s]
+>> config.json: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 612/612 [00:00<?, ?B/s]
+>> Xet Storage is enabled for this repo, but the 'hf_xet' package is not installed. Falling back to regular HTTP download. For better performance, install the package with: `pip install huggingface_hub[hf_xet]` or `pip install hf_xet`
+>> 2026-07-06 22:05:53 | huggingface_hub.file_download  | WARNING  | Xet Storage is enabled for this repo, but the 'hf_xet' package is not installed. Falling back to regular HTTP download. For better performance, install the package with: `pip install huggingface_hub[hf_xet]` or `pip install hf_xet`
+>> model.safetensors: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 90.9M/90.9M [00:03<00:00, 25.2MB/s]
+>> tokenizer_config.json: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 350/350 [00:00<?, ?B/s]
+>> vocab.txt: 232kB [00:00, 5.93MB/s]
+>> tokenizer.json: 466kB [00:00, 13.4MB/s]
+>> special_tokens_map.json: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 112/112 [00:00<00:00, 111kB/s]
+>> config.json: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 190/190 [00:00<?, ?B/s]2026-07-06 22:06:04 | sentence_transformers.SentenceTransformer | INFO     | Use pytorch device_name: cpu
+>> 
+>> Batches: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:00<00:00,  1.14it/s]2026-07-06 22:06:05 | chromadb.telemetry.product.posthog | ERROR    | Failed to send telemetry event CollectionAddEvent: capture() takes 1 positional argument but 3 were given
+>> 
+>> 2026-07-06 22:15:25 | nexus.boot                     | INFO     | Session context saved
+>> 2026-07-06 22:15:25 | nexus.boot                     | INFO     | Metrics flushed
+>> 2026-07-06 22:15:25 | nexus.boot                     | INFO     | NEXUS AI shutdown complete.
+>> (venv) PS E:\Jarvis 2.0\venv> 
+>> (venv) PS E:\Jarvis 2.0\venv> python main.py
+>> 2026-07-06 22:15:37 | nexus.boot                     | INFO     | NEXUS AI v4.0.0 boot sequence starting...
+>> 2026-07-06 22:15:37 | nexus.boot                     | INFO     | Platform: win32 | Python: 3.12.0
+>> 2026-07-06 22:15:38 | nexus.boot                     | INFO     | Configuration loaded from C:\Users\lenovo\.nexus_ai\.env
+>> 2026-07-06 22:15:38 | nexus.boot                     | INFO     | Runtime directories verified
+>> 2026-07-06 22:15:40 | chromadb.telemetry.product.posthog | INFO     | Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+>> 2026-07-06 22:15:40 | chromadb.telemetry.product.posthog | ERROR    | Failed to send telemetry event ClientStartEvent: capture() takes 1 positional argument but 3 were given
+>> pygame 2.6.1 (SDL 2.28.4, Python 3.12.0)
+>> Hello from the pygame community. https://www.pygame.org/contribute.html
+>> 2026-07-06 22:15:50 | nexus.boot                     | WARNING  | Health check found issues (3 warnings, 1 errors)
+>> 2026-07-06 22:15:50 | nexus.boot                     | INFO     | Degraded subsystems: cloud_llm, wake_word, ollama
+>> 2026-07-06 22:15:51 | nexus.boot                     | INFO     | First run detected — showing onboarding wizard
+>> 2026-07-06 22:15:55 | nexus.boot                     | INFO     | Initializing billing and licensing subsystem...
+>> 2026-07-06 22:15:55 | nexus.boot                     | INFO     | License loaded — current tier: free
+>> 2026-07-06 22:15:55 | nexus.boot                     | INFO     | Initializing tool registry...
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'web_fetch' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'tool' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'python_interpreter' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'document_builder' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'pdf_reader' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'window_manager' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'clipboard_manager' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'local_vector_db' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'system_monitor' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'code_editor_control' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'email_client' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'workflow_macro' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'image_processor' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'data_analyzer' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'process_manager' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'notification_sender' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'calendar_manager' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Registered tool 'git_operations' (source=builtin)
+>> 2026-07-06 22:15:56 | nexus.registry                 | INFO     | Loaded 22 built-in tools
+>> 2026-07-06 22:15:56 | nexus.boot                     | INFO     | Tool registry initialized with 22 tools
+>> 2026-07-06 22:15:56 | nexus.boot                     | INFO     | Initializing memory subsystem...
+>> 2026-07-06 22:15:56 | nexus.boot                     | WARNING  | Memory subsystem initialized with in-memory fallback: 'VectorStore' object has no attribute 'heartbeat'
+>> 2026-07-06 22:15:56 | nexus.boot                     | INFO     | Initializing audio subsystem...
+>> 2026-07-06 22:15:56 | nexus.boot                     | INFO     | Audio subsystem ready (on-demand initialization)
+>> 2026-07-06 22:15:56 | nexus.boot                     | INFO     | Initializing agent orchestrator...
+>> 2026-07-06 22:15:56 | nexus.boot                     | INFO     | Agent orchestrator ready
+>> 
+>> ╔══════════════════════════════════════════════════════════╗
+>> ║  NEXUS AI v4.0 — Autonomous Desktop Omni-Agent         ║
+>> ║  Hardware: i3 7th Gen · 12GB RAM · Ollama + Groq API   ║
+>> ╚══════════════════════════════════════════════════════════╝
+>> 
+>>   (3 warnings — run 'nexus health' for details)
+>> 2026-07-06 22:15:56 | nexus.boot                     | INFO     | Starting UI (GUI mode)...
+>> invalid command name "2563412505088update"
+>>     while executing
+>> "2563412505088update"
+>>     ("after" script)
+>> invalid command name "2563423930752check_dpi_scaling"
+>>     while executing
+>> "2563423930752check_dpi_scaling"
+>>     ("after" script)
+>> invalid command name "2563381466816_click_animation"
+>>     while executing
+>> "2563381466816_click_animation"
+>>     ("after" script)
+>> E:\Jarvis 2.0\venv\venv\Lib\site-packages\pygame\pkgdata.py:25: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+>>   from pkg_resources import resource_stream, resource_exists
+>> 2026-07-06 22:17:32 | nexus.boot                     | INFO     | User input received (24 chars)
+>> 2026-07-06 22:17:32 | nexus.orchestrator             | INFO     | Intent: simple_command (conf=0.85, full_agent=False, 0ms)
+>> 2026-07-06 22:17:32 | nexus.playbook_engine          | INFO     | Loaded playbook 'compliant_outreach_campaign' v1.0.0
+>> 2026-07-06 22:17:32 | nexus.playbook_engine          | INFO     | Loaded playbook 'local_business_site' v1.0.0
+>> 2026-07-06 22:17:32 | nexus.playbook_engine          | INFO     | Loaded 2 playbooks from C:\Users\lenovo\.nexus_ai\playbooks
+>> 2026-07-06 22:17:32 | nexus.playbook_engine          | INFO     | No playbook match for goal: open youtube on opera gx
+>> 2026-07-06 22:17:35 | nexus.llm_router               | WARNING  | ollama failed: All connection attempts failed
+>> 2026-07-06 22:17:35 | chromadb.telemetry.product.posthog | INFO     | Anonymized telemetry enabled. See                     https://docs.trychroma.com/telemetry for more information.
+>> 2026-07-06 22:17:35 | chromadb.telemetry.product.posthog | ERROR    | Failed to send telemetry event ClientStartEvent: capture() takes 1 positional argument but 3 were given
+>> 2026-07-06 22:17:51 | sentence_transformers.SentenceTransformer | INFO     | Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+>> 2026-07-06 22:17:55 | sentence_transformers.SentenceTransformer | INFO     | Use pytorch device_name: cpu
+>> Batches: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:00<00:00, 17.82it/s]2026-07-06 22:17:55 | chromadb.telemetry.product.posthog | ERROR    | Failed to send telemetry event CollectionAddEvent: capture() takes 1 positional argument but 3 were given
